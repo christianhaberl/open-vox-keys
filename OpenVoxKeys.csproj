@@ -10,6 +10,7 @@
     <Authors>Christian Haberl</Authors>
     <RepositoryType>git</RepositoryType>
     <RuntimeFrameworkVersion>10.0.12</RuntimeFrameworkVersion>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <Product>Open Vox Keys</Product>
     <Description>Configurable desktop dictation</Description>
     <OutputType>WinExe</OutputType>
