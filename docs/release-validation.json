@@ -1,0 +1,39 @@
+{
+  "version": "0.3.0-beta.1",
+  "target": "Windows x64",
+  "status": "private release candidate; publication requires approval",
+  "client_protocol_cases": [
+    "valid primary",
+    "wrong sample count",
+    "premature final",
+    "disconnect",
+    "backend error",
+    "cancel without fallback",
+    "direct file ASR"
+  ],
+  "selftest_cases": [
+    "hotkey transitions",
+    "Unicode INPUT ABI",
+    "embedded icon",
+    "DPAPI roundtrip",
+    "plaintext key migration",
+    "corrupt settings retained",
+    "invalid endpoint rejected"
+  ],
+  "python_tests": 11,
+  "validation_commands": [
+    "dotnet restore --locked-mode",
+    "dotnet build -c Release --no-restore",
+    "powershell -File tools/Test.ps1",
+    "python -m unittest discover -s backend -p test_*.py"
+  ],
+  "production_installation": "Previous 0.2.1 left running; candidate tests do not replace it.",
+  "manual_acceptance": "Prior preview: user confirmed live dictation/insertion and icon. New candidate: packaging and protocol tests; no new live microphone acceptance claim.",
+  "limitations": [
+    "unsigned preview",
+    "Windows x64",
+    "one gateway session",
+    "external ASR runtimes/models required",
+    "no universal input compatibility claim"
+  ]
+}

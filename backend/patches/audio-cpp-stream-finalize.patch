@@ -1,0 +1,27 @@
+diff --git a/src/models/voxtral_realtime/session.cpp b/src/models/voxtral_realtime/session.cpp
+index 715e185..6adbb51 100644
+--- a/src/models/voxtral_realtime/session.cpp
++++ b/src/models/voxtral_realtime/session.cpp
+@@ -328,6 +328,22 @@ runtime::TaskResult VoxtralRealtimeSession::finalize() {
+     if (streaming_audio_offset_values_ == streaming_audio_.samples.size() && streaming_token_count_ == 0) {
+         throw std::runtime_error("VoxTral realtime finalize() requires streamed audio");
+     }
++    // Drain the model's transcription delay and the final partial audio block.
++    // The offline frontend uses the same (delay + 1 + 10) audio-token suffix.
++    // Without this suffix the streaming loop leaves the final words pending and
++    // reports a successful but truncated transcript at EOF. Padding is processed
++    // here, after the real input ends, so its compute cost remains in finalize.
++    const auto & config = assets_->config;
++    const int64_t unit = config.audio_length_per_tok * config.frontend.hop_length;
++    const int64_t suffix_samples = (config.default_num_delay_tokens + 1 + 10) * unit;
++    const int64_t suffix_frames = source_frames_for_target_samples(
++        suffix_samples,
++        streaming_audio_.sample_rate,
++        streaming_audio_.channels,
++        static_cast<int>(config.frontend.sample_rate));
++    streaming_audio_.samples.resize(
++        streaming_audio_.samples.size() + static_cast<size_t>(suffix_frames * streaming_audio_.channels),
++        0.0F);
+     // Any partial this last pass produces has already gone to the sink.
+     (void) process_available_stream_chunks();
+     streaming_result_ = runtime::TaskResult{};

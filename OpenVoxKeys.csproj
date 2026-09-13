@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <ApplicationIcon>assets/app.ico</ApplicationIcon>
+    <Version>0.3.0-beta.1</Version>
+    <AssemblyName>OpenVoxKeys</AssemblyName>
+    <RepositoryUrl>https://github.com/christianhaberl/open-vox-keys</RepositoryUrl>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <Deterministic>true</Deterministic>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>Christian Haberl</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RuntimeFrameworkVersion>10.0.12</RuntimeFrameworkVersion>
+    <Product>Open Vox Keys</Product>
+    <Description>Configurable desktop dictation</Description>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="assets/app.ico" LogicalName="OpenVoxKeys.AppIcon" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+</Project>

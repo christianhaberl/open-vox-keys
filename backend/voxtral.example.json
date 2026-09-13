@@ -1,0 +1,16 @@
+{
+  "host": "127.0.0.1",
+  "port": 19044,
+  "backend": "vulkan",
+  "threads": 8,
+  "lazy_load": false,
+  "models": [{
+    "id": "voxtral-stream",
+    "family": "voxtral_realtime",
+    "path": "/absolute/path/to/voxtral-mini-4b-realtime-2602-q4_k.gguf",
+    "task": "asr",
+    "mode": "streaming",
+    "session_options": {"voxtral_realtime.stream_batch_tokens": 4},
+    "default_request_options": {"max_new_tokens": 8192}
+  }]
+}
