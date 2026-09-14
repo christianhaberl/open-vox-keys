@@ -1,5 +1,5 @@
 aiohttp==3.13.2
 numpy==2.3.5
 onnxruntime==1.23.2; python_version < "3.14"
-onnxruntime==1.29.0; python_version >= "3.14"
+onnxruntime==1.30.0; python_version >= "3.14"
 pysbd==0.3.4
