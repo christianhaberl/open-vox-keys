@@ -58,11 +58,11 @@ static class SessionTests
             if (mode == "cancel") { await Task.Delay(1500); return; }
             if (mode == "disconnect") return;
             if (mode == "error") { await Send(ws, new { type = "error", text = "Incomplete backend" }); return; }
-            await Send(ws, new { type = "result", text = mode is "empty" or "both-empty" ? "  " : "Complete primary.", source = "whisper", samples = mode == "wrong-size" ? 1 : Pcm.Length / 2 });
+            await Send(ws, new { type = "result", text = mode is "empty" or "both-empty" or "quiet" ? "  " : "Complete primary.", source = "whisper", samples = mode == "wrong-size" ? 1 : Pcm.Length / 2 });
         });
         var settings = new DictationSettings { GatewayUrl = mode == "direct" ? "" : gateway.Url, FallbackUrl = fallback.Url + "/v1/audio/transcriptions", FinishTimeoutSeconds = 5 };
         using var session = new LiveSession(settings, _ => { }, _ => { });
-        session.Feed(mode == "silence" ? new byte[Pcm.Length] : Pcm); if (mode != "direct") await gotStart.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        session.Feed(mode == "silence" ? new byte[Pcm.Length] : mode == "quiet" ? Enumerable.Range(0, Pcm.Length).Select(i => (byte)(i % 2 == 0 ? 4 : 0)).ToArray() : Pcm); if (mode != "direct") await gotStart.Task.WaitAsync(TimeSpan.FromSeconds(5));
         if (mode == "early") await Task.Delay(200);
         var finish = session.Finish();
         if (mode == "cancel")
@@ -71,12 +71,12 @@ static class SessionTests
             try { await finish; throw new Exception("Cancellation returned text"); } catch (OperationCanceledException) { }
             Assert(requests == 0, "Cancellation must not invoke fallback");
         }
-        else if (mode is "both-empty" or "silence")
+        else if (mode is "both-empty" or "silence" or "quiet")
         {
             bool failed = false;
             try { await finish; } catch (IOException) { failed = true; }
             Assert(failed, "Empty/silent dictation must fail explicitly");
-            Assert(requests == (mode == "silence" ? 0 : 1), "Unexpected retries for empty/silent dictation");
+            Assert(requests == (mode is "silence" or "quiet" ? 0 : 1), "Unexpected retries for empty/silent dictation");
         }
         else
         {
@@ -89,7 +89,7 @@ static class SessionTests
     internal static void Run()
     {
         var results = new List<object>();
-        foreach (string mode in new[] { "valid", "wrong-size", "early", "disconnect", "error", "cancel", "direct", "empty", "both-empty", "silence" })
+        foreach (string mode in new[] { "valid", "wrong-size", "early", "disconnect", "error", "cancel", "direct", "empty", "both-empty", "silence", "quiet" })
         {
             try { Case(mode).GetAwaiter().GetResult(); results.Add(new { test = mode, passed = true }); }
             catch (Exception e) { results.Add(new { test = mode, passed = false, error = e.ToString() }); Environment.ExitCode = 1; }

@@ -15,6 +15,12 @@ macOS and Linux clients are planned; they are not implemented.
 
 ## Install
 
+For builds offering `OpenVoxKeys-<version>-Setup.exe`, double-click the installer
+and choose **Install**. It includes an autostart checkbox, a Start menu shortcut,
+and an entry in Windows **Installed apps** for removal. No terminal commands are
+needed. The setup is unsigned, like the portable app. The original beta.1 release
+has only the portable ZIP; the graphical installer is new in beta.2.
+
 Download the Windows x64 ZIP from [Releases](https://github.com/christianhaberl/open-vox-keys/releases),
 verify its SHA-256 against the accompanying checksum file, and extract it.
 Run `OpenVoxKeys.exe` directly, or install for your Windows user:
@@ -87,9 +93,11 @@ dotnet restore --locked-mode
 dotnet build -c Release --no-restore
 powershell -File .\tools\Test.ps1
 powershell -File .\tools\Publish.ps1
+powershell -File .\tools\BuildSetup.ps1
 ```
 
-Output: `dist\OpenVoxKeys-win-x64.zip` and a checksum file. See
+Output: `dist\OpenVoxKeys-win-x64.zip`, `dist\OpenVoxKeys-<version>-Setup.exe`,
+and SHA-256 checksum files. See
 [development](docs/development.md), [backend setup](docs/backend.md),
 [release process](docs/releasing.md), and [changelog](CHANGELOG.md).
 

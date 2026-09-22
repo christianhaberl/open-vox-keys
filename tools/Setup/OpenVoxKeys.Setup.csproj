@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>OpenVoxKeysSetup</AssemblyName>
+    <Product>Open Vox Keys Setup</Product>
+    <RuntimeFrameworkVersion>10.0.12</RuntimeFrameworkVersion>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <ApplicationIcon>../../assets/app.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../dist/OpenVoxKeys-win-x64.zip" LogicalName="Package.zip" />
+    <EmbeddedResource Include="../../assets/app.ico" LogicalName="SetupIcon" />
+  </ItemGroup>
+</Project>

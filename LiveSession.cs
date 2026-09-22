@@ -102,6 +102,11 @@ sealed class LiveSession : IDisposable
         catch (Exception) when (!cancel.IsCancellationRequested)
         {
             socket.Abort();
+            lock (audioLock)
+            {
+                if (samplePeak < 64 && Math.Sqrt(squareSum / Math.Max(1, sampleCount)) < 8)
+                    throw new IOException("The microphone signal is extremely quiet and ASR returned no result. Check the microphone, hardware mute, cable and input gain before retrying.");
+            }
             if (string.IsNullOrWhiteSpace(settings.FallbackUrl)) throw new IOException("Gateway returned no complete result and no file ASR is configured.");
             progress("Using file ASR …");
             return await FileTranscription();

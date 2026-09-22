@@ -1,6 +1,7 @@
 # Per-user installation of a published portable build. No administrator required.
-param([switch]$Uninstall, [switch]$Autostart)
+param([switch]$Uninstall, [switch]$Autostart, [switch]$DisableAutostart)
 $ErrorActionPreference = 'Stop'
+if ($Autostart -and $DisableAutostart) { throw 'Choose only one autostart option.' }
 $target = Join-Path $env:LOCALAPPDATA 'Programs\OpenVoxKeys'
 $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Open Vox Keys.lnk'
 $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -8,6 +9,7 @@ if ($Uninstall) {
     $active = Get-Process OpenVoxKeys,VoicePoc -ErrorAction SilentlyContinue | Where-Object { $_.Path -in @((Join-Path $target 'OpenVoxKeys.exe'), (Join-Path $target 'VoicePoc.exe')) }
     if ($active) { throw 'Quit Open Vox Keys from the tray menu before uninstalling.' }
     Remove-ItemProperty -Path $run -Name OpenVoxKeys -ErrorAction SilentlyContinue
+    Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenVoxKeys' -Recurse -ErrorAction SilentlyContinue
     Remove-Item $shortcut -ErrorAction SilentlyContinue
     if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     Write-Output 'Open Vox Keys uninstalled. Personal settings and recordings have been retained.'
@@ -28,12 +30,14 @@ $link = $shell.CreateShortcut($shortcut)
 $link.TargetPath = Join-Path $target 'OpenVoxKeys.exe'
 $link.WorkingDirectory = $target
 $link.Save()
-if ($Autostart) {
+if ($Autostart -or $DisableAutostart) {
     $settingsPath = Join-Path $env:LOCALAPPDATA 'OpenVoxKeys\settings.json'
     New-Item (Split-Path $settingsPath -Parent) -ItemType Directory -Force | Out-Null
     $settings = if (Test-Path $settingsPath) { Get-Content $settingsPath -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
-    $settings | Add-Member -NotePropertyName StartWithWindows -NotePropertyValue $true -Force
+    $settings | Add-Member -NotePropertyName StartWithWindows -NotePropertyValue ([bool]$Autostart) -Force
     $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
-    New-ItemProperty -Path $run -Name OpenVoxKeys -Value ('"' + $link.TargetPath + '"') -PropertyType String -Force | Out-Null }
+    if ($Autostart) { New-ItemProperty -Path $run -Name OpenVoxKeys -Value ('"' + $link.TargetPath + '"') -PropertyType String -Force | Out-Null }
+    else { Remove-ItemProperty -Path $run -Name OpenVoxKeys -ErrorAction SilentlyContinue }
+}
 Write-Output "Installed: $target"
 Write-Output 'Start menu -> Open Vox Keys. Open Settings from the system tray icon.'

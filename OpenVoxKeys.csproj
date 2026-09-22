@@ -21,6 +21,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="tools/Setup/**/*.cs" />
     <EmbeddedResource Include="assets/app.ico" LogicalName="OpenVoxKeys.AppIcon" />
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>

@@ -4,6 +4,8 @@ Versions follow Semantic Versioning. Prereleases may change configuration and AP
 
 ## 0.3.0-beta.2 — Unreleased
 
+- Add a self-contained graphical Windows installer with autostart selection and Installed apps removal.
+- Report extremely quiet input after ASR failure instead of sending unusable audio to a cold fallback.
 - Reject empty gateway transcripts and try the configured file ASR once.
 - Show a persistent error window for failed dictations, including empty ASR results.
 - Detect missing microphone samples and digital silence before file fallback;
