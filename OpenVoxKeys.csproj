@@ -23,6 +23,6 @@
   <ItemGroup>
     <Compile Remove="tools/Setup/**/*.cs" />
     <EmbeddedResource Include="assets/app.ico" LogicalName="OpenVoxKeys.AppIcon" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio" Version="3.1.0" />
   </ItemGroup>
 </Project>
