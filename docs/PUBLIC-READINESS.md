@@ -1,6 +1,9 @@
-# Public release candidate audit
+# Initial publication checklist — historical (2026-09-14)
 
-Candidate: **0.3.0-beta.1**. Visibility remains private until owner approval.
+This document records preparation for **0.3.0-beta.1**. The owner subsequently
+approved publication; the repository is public under MIT. The steps below are
+historical, not pending actions or a current-version audit. See
+[audit-2026-09-23.md](audit-2026-09-23.md) for the later multi-reviewer audit.
 
 ## Prepared
 

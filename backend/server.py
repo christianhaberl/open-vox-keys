@@ -44,6 +44,10 @@ def wav(pcm):
 
 @web.middleware
 async def authenticate(request, handler):
+    # This protocol is for native clients, not browser pages. Loopback/private
+    # binding alone does not prevent cross-origin WebSocket connections.
+    if 'Origin' in request.headers:
+        raise web.HTTPForbidden(text='Browser origins are not supported.')
     key = request.app['config'].get('api_key', '')
     if key and request.headers.get('Authorization') != 'Bearer ' + key:
         raise web.HTTPUnauthorized()
@@ -79,6 +83,8 @@ async def websocket(request):
     pcm = bytearray()
     stream_final = None
     stream_failed = False
+    upload_complete = False
+    stopped = False
     results = []
     voiced = []
     batch_failed = False
@@ -111,9 +117,11 @@ async def websocket(request):
                         await emit(e)
 
         async def upload():
+            nonlocal upload_complete
             while True:
                 data = await q.get()
                 if data is None:
+                    upload_complete = True
                     return
                 yield (np.frombuffer(data, dtype='<i2').astype('<f4') / 32768).tobytes()
 
@@ -140,6 +148,8 @@ async def websocket(request):
                             await events(seg.delta(text))
                             await emit(dict(type='delta', text=text))
                         elif e.get('type') == 'transcript.text.done':
+                            if not stopped or not upload_complete:
+                                raise RuntimeError('Streaming finalized before complete audio upload')
                             if e.get('text', '') != seg.text:
                                 raise RuntimeError('Streaming final/delta mismatch')
                             stream_final = e.get('text', '')
@@ -162,7 +172,9 @@ async def websocket(request):
                     return
                 row = {k: v for k, v in section.items() if k != 'pcm'}
                 try:
-                    if not section['has_speech']:
+                    # VAD is a segmentation hint, not proof that audio is empty.
+                    # A false negative must never silently discard a section.
+                    if not any(section['pcm']):
                         row.update(text='', ok=True)
                         results.append(row)
                         await emit(dict(type='section_result', number=row['number'], text='', ok=True))
@@ -187,7 +199,7 @@ async def websocket(request):
                         if not isinstance(text, str) or not text.strip():
                             raise ValueError('Empty transcript for a section with detected speech')
                         row.update(text=text.strip(), ok=True)
-                except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError, ValueError, KeyError):
+                except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError, ValueError, KeyError, TypeError):
                     batch_failed = True
                     row.update(text='', ok=False)
                 results.append(row)
@@ -198,8 +210,18 @@ async def websocket(request):
         tasks.extend((st, bt))
         await emit(dict(type='ready'))
         processed = 0
-        stopped = False
-        async for m in ws:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + float(cfg.get('capture_max_seconds', 660))
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise RuntimeError('Recording wall-clock limit reached')
+            try:
+                m = await asyncio.wait_for(ws.receive(), min(remaining, float(cfg.get('capture_idle_seconds', 15))))
+            except asyncio.TimeoutError as exc:
+                raise RuntimeError('Recording timed out waiting for audio or stop') from exc
+            if m.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                break
             if m.type == aiohttp.WSMsgType.BINARY:
                 if len(m.data) % 2:
                     raise ValueError('Odd PCM byte count')
@@ -233,7 +255,10 @@ async def websocket(request):
                         stream_failed = True
                 await events(seg.finish(len(pcm)//2))
                 work.put_nowait(None)
-                await asyncio.wait_for(bt, float(msg.get('finish_timeout_s', 25)))
+                try:
+                    await asyncio.wait_for(bt, float(msg.get('finish_timeout_s', 25)))
+                except asyncio.TimeoutError:
+                    batch_failed = True
                 if not batch_failed and results:
                     text = ' '.join(r['text'] for r in results if r['text'])
                     source = 'whisper'

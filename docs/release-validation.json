@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0-beta.2",
+  "version": "0.3.0-beta.3",
   "target": "Windows x64",
-  "status": "validated prerelease; maintainer authorized publication",
+  "status": "audit fix candidate; final CI pending",
   "client_protocol_cases": [
     "valid primary",
     "wrong sample count",
@@ -24,7 +24,7 @@
     "corrupt settings retained",
     "invalid endpoint rejected"
   ],
-  "python_tests": 13,
+  "python_tests": 22,
   "validation_commands": [
     "dotnet restore --locked-mode",
     "dotnet build -c Release --no-restore",
@@ -34,7 +34,7 @@
     "powershell -File tools/BuildSetup.ps1",
     "powershell -File tools/TestInstall.ps1 (disposable CI runner only)"
   ],
-  "production_installation": "GUI upgrade verified on development Windows PC; settings retained, autostart and Installed apps registration verified.",
+  "production_installation": "Previous beta.2 installed. Audit-fix candidate not yet deployed; release notes record final deployment/CI evidence.",
   "manual_acceptance": "User confirmed live microphone dictation on beta.2 reliability fix; subsequent GUI-installed build logged primary result and input submission. No reboot test.",
   "limitations": [
     "unsigned preview",
@@ -42,5 +42,6 @@
     "one gateway session",
     "external ASR runtimes/models required",
     "no universal input compatibility claim"
-  ]
+  ],
+  "audit": "docs/audit-2026-09-23.md"
 }

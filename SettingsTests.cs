@@ -23,6 +23,10 @@ static class SettingsTests
             bool rejected = false;
             try { DictationSettings.LoadFrom(path); } catch (FormatException) { rejected = true; }
             if (!rejected || File.ReadAllText(path) != corrupt) throw new Exception("Corrupt settings were overwritten");
+            string backup = SettingsRecovery.Preserve(path);
+            settings.SaveTo(path);
+            if (File.ReadAllText(backup) != corrupt) throw new Exception("Settings recovery did not preserve the original bytes");
+            File.WriteAllText(path, corrupt);
             settings.GatewayUrl = "file:///private";
             rejected = false;
             try { settings.SaveTo(path); } catch { rejected = true; }

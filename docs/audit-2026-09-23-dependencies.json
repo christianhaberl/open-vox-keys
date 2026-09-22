@@ -1,0 +1,152 @@
+{
+  "checked_at_utc": "2026-09-22T23:20:01.027957+00:00",
+  "audited_release": "v0.3.0-beta.2",
+  "audited_commit": "3c55eb2ffdf35a628bbbbc731152ffe8d3991da0",
+  "method": "Exact ecosystem/name/version queries to OSV, followed by relevant upstream aiohttp security advisories; official .NET release metadata and public package runtimeconfig.",
+  "sources": {
+    "osv_batch": "https://api.osv.dev/v1/querybatch",
+    "dotnet_10_release_metadata": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json"
+  },
+  "nuget": {
+    "source": "packages.lock.json",
+    "package_count": 7,
+    "packages": {
+      "NAudio": "2.2.1",
+      "NAudio.Asio": "2.2.1",
+      "NAudio.Core": "2.2.1",
+      "NAudio.Midi": "2.2.1",
+      "NAudio.Wasapi": "2.2.1",
+      "NAudio.WinForms": "2.2.1",
+      "NAudio.WinMM": "2.2.1"
+    },
+    "returned_advisory_records": 0
+  },
+  "python_direct": [
+    {
+      "name": "aiohttp",
+      "version_before": "3.13.2",
+      "unique_github_advisory_records": 32,
+      "version_after": "3.14.3",
+      "returned_advisory_records_after": 0
+    },
+    {
+      "name": "numpy",
+      "version": "2.3.5",
+      "returned_advisory_records": 0
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.23.2",
+      "returned_advisory_records": 0
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.29.0",
+      "returned_advisory_records": 0
+    },
+    {
+      "name": "pysbd",
+      "version": "0.3.4",
+      "returned_advisory_records": 0
+    }
+  ],
+  "relevant_upstream_advisories": [
+    {
+      "id": "GHSA-xcgm-r5h9-7989",
+      "url": "https://github.com/aio-libs/aiohttp/security/advisories/GHSA-xcgm-r5h9-7989",
+      "affected": "<=3.14.0",
+      "fixed": "3.14.1",
+      "relevance": "The gateway exposes a WebSocket endpoint; incomplete frames can bypass memory limits."
+    },
+    {
+      "id": "GHSA-cq5v-8q36-5273",
+      "url": "https://github.com/aio-libs/aiohttp/security/advisories/GHSA-cq5v-8q36-5273",
+      "affected": "<=3.14.2",
+      "fixed": "3.14.3",
+      "relevance": "The gateway parses upstream HTTP responses; malformed responses can cause a C-parser denial of service."
+    }
+  ],
+  "aiohttp_isolated_resolution": {
+    "package_count": 10,
+    "packages": [
+      {
+        "name": "multidict",
+        "version": "6.9.1",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "aiosignal",
+        "version": "1.4.0",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "propcache",
+        "version": "0.5.4",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "yarl",
+        "version": "1.25.1",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "aiohttp",
+        "version": "3.14.3",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "frozenlist",
+        "version": "1.8.0",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "typing_extensions",
+        "version": "4.16.0",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "idna",
+        "version": "3.20",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "attrs",
+        "version": "26.1.0",
+        "returned_advisory_records": 0
+      },
+      {
+        "name": "aiohappyeyeballs",
+        "version": "2.7.1",
+        "returned_advisory_records": 0
+      }
+    ],
+    "backend_tests_passed": 22,
+    "production_environment_modified": false
+  },
+  "bundled_runtime": {
+    "verified_public_asset": "OpenVoxKeys-win-x64.zip",
+    "frameworks": {
+      "Microsoft.NETCore.App": "10.0.12",
+      "Microsoft.WindowsDesktop.App": "10.0.12"
+    },
+    "official_latest_runtime": "10.0.12",
+    "official_latest_release_date": "2026-09-08",
+    "newer_patch_in_feed": false,
+    "cves_addressed_by_installed_release": [
+      "CVE-2026-69439",
+      "CVE-2026-71328",
+      "CVE-2026-69522",
+      "CVE-2026-69304",
+      "CVE-2026-58649",
+      "CVE-2026-69806"
+    ]
+  },
+  "limits": [
+    "No returned advisory is not proof that a dependency has no vulnerabilities.",
+    "32 GitHub advisory records are version matches, not 32 independently reproduced product exploits; PYSEC aliases were not double-counted.",
+    "No denial-of-service exploit was run against a live service.",
+    "Python direct requirements are pinned, but all transitive resolutions across all supported Python versions are not locked or audited here.",
+    "The isolated aiohttp resolution was tested on Python 3.12; other Python versions and GPU/model runtimes were not exercised.",
+    "The official runtime metadata identifies published servicing releases; no comprehensive Microsoft CVRF applicability analysis was performed."
+  ]
+}

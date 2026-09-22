@@ -152,3 +152,22 @@ host; this is not a hardware-independent performance guarantee.
 Client `Language` also selects the pySBD sentence rules. Unsupported sentence-rule
 languages produce an error; use file mode or add/test suitable segmentation rules.
 The English UI does not constrain transcription to English.
+
+### Completeness and capture bounds
+
+The reference gateway accepts a streaming final only after the client has stopped
+and every queued audio frame has reached the streaming upload iterator's EOF.
+A final emitted earlier is incomplete and cannot be used as a fallback.
+Batch completion timeouts may use an already complete streaming transcript.
+
+VAD controls section boundaries, not whether recorded audio may be discarded.
+Every section containing nonzero PCM reaches batch ASR, even when VAD labels it
+non-speech. Only digital-zero sections skip batch inference. This favors retaining
+quiet speech; background noise can still cause ASR hallucinations and is not
+claimed to be reliably distinguished from speech.
+
+A capture releases its exclusive gateway slot after 15 seconds without an audio
+or stop message, or after 660 seconds of wall time. Operators can set
+`capture_idle_seconds` and `capture_max_seconds` in the gateway configuration.
+The independent PCM limit remains ten minutes. These are capture limits; final
+ASR processing uses the separate client-provided completion timeouts.

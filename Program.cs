@@ -9,7 +9,7 @@ static class Program
     static void Main(string[] args)
     {
         if (args.Contains("--test-session")) { SessionTests.Run(); return; }
-        if (args.Contains("--selftest")) { ChordState.Test(); TextInsertion.Validate(); SettingsTests.Run(); if (AppBrand.Icon.Width <= 0) throw new Exception("Icon missing"); return; }
+        if (args.Contains("--selftest")) { ChordState.Test(); TextInsertion.Validate(); SettingsTests.Run(); AppLog.Test(); if (AppBrand.Icon.Width <= 0) throw new Exception("Icon missing"); return; }
         ApplicationConfiguration.Initialize();
         if (args.Contains("--test-mode")) { Application.Run(new TestMode()); return; }
         if (args.Contains("--test-insertion")) { Application.Run(TextInsertion.TestWindow()); return; }
@@ -35,7 +35,19 @@ sealed class Dictation : OrbWindow
     public Dictation(string[] args)
     {
         Text = "Open Vox Keys"; Icon = AppBrand.Icon; details.Icon = AppBrand.Icon;
-        try { settings = DictationSettings.Load(); } catch (Exception e) { status.Text = "Settings: " + e.Message; }
+        try { settings = DictationSettings.Load(); }
+        catch (Exception)
+        {
+            string backup;
+            try { backup = SettingsRecovery.Preserve(DictationSettings.FilePath); }
+            catch (Exception)
+            {
+                MessageBox.Show("Settings could not be loaded or backed up. Open Vox Keys will exit without replacing them. Check access to " + DictationSettings.FilePath, "Open Vox Keys · Settings error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Shown += (_, _) => Close();
+                return;
+            }
+            MessageBox.Show("Settings could not be loaded. The original file is preserved at:\n" + backup + "\n\nConfigure your endpoints again in Settings. API keys protected for another Windows user or PC must be entered again.", "Open Vox Keys · Settings recovery", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
         details.Controls.Add(output); details.Controls.Add(status);
         details.FormClosing += (_, e) => { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; details.Hide(); } };
         var buttons = new FlowLayoutPanel() { Dock = DockStyle.Bottom, Height = 38 };
@@ -88,7 +100,7 @@ sealed class Dictation : OrbWindow
         };
     }
     void Ui(Action f) { if (!IsDisposed && IsHandleCreated) try { BeginInvoke(f); } catch (InvalidOperationException) { } }
-    void Log(string s) => File.AppendAllText(log, DateTime.UtcNow.ToString("O") + " " + s + Environment.NewLine);
+    void Log(string s) => AppLog.Write(log, s);
     async Task WarmFallback()
     {
         if (settings.FallbackUrl.Length == 0 || !new Uri(settings.FallbackUrl).IsLoopback) return;
@@ -119,7 +131,17 @@ sealed class Dictation : OrbWindow
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); captureStopped = done;
             var input = new WaveInEvent { DeviceNumber = settings.MicrophoneDevice, WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 64, NumberOfBuffers = 4 }; microphone = input;
             input.DataAvailable += (_, e) => { byte[] bytes = e.Buffer[..e.BytesRecorded]; active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
-            input.RecordingStopped += (_, e) => { if (e.Exception != null) done.TrySetException(e.Exception); else done.TrySetResult(); };
+            input.RecordingStopped += (_, e) =>
+            {
+                if (e.Exception == null) { done.TrySetResult(); return; }
+                done.TrySetException(e.Exception);
+                Ui(() =>
+                {
+                    // A device failure must end capture even while the user holds the hotkey.
+                    // Ignore callbacks belonging to a cancelled, closed, or replaced capture.
+                    if (recording && !cancelled && ReferenceEquals(microphone, input)) Stop();
+                });
+            };
             recording = true; started = DateTime.UtcNow; input.StartRecording(); Log("recording-start streaming=true");
         }
         catch (Exception e) { recording = false; microphone?.Dispose(); microphone = null; session?.Dispose(); session = null; status.Text = "Microphone error: " + e.Message; Log("recording-error " + e.Message); Hide(); Notice(); }

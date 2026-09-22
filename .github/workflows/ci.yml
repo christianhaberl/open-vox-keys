@@ -16,9 +16,8 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet build -c Release --no-restore
       - run: ./tools/Test.ps1
-      - run: ./tools/Publish.ps1
-      - run: ./tools/TestInstall.ps1
       - run: ./tools/BuildSetup.ps1
+      - run: ./tools/TestInstall.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: OpenVoxKeys-win-x64

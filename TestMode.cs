@@ -70,9 +70,10 @@ sealed class TestMode : Form
         if (audio == null) return;
         if (!Uri.TryCreate(endpoint.Text.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https")) { status.Text = "Enter a valid HTTP(S) base URL."; return; }
         var selected = models.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToArray(); if (selected.Length == 0) { status.Text = "Enter at least one model."; return; }
-        SetBusy(true); cts = new(); var token = cts.Token; var rows = new List<object>(); string truth = reference.Text; var bytes = File.ReadAllBytes(audio); bool openAI = protocol.SelectedIndex == 1;
+        SetBusy(true); cts = new(); var token = cts.Token; var rows = new List<object>(); string truth = reference.Text; bool openAI = protocol.SelectedIndex == 1;
         try
         {
+            var bytes = File.ReadAllBytes(audio);
             using var http = new HttpClient() { Timeout = TimeSpan.FromMinutes(10) };
             if (key.Text.Length > 0) http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key.Text.Trim());
             async Task<string> Call(string model)

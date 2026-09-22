@@ -68,6 +68,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global keep_warm, last_used
         try:
+            # Native-client endpoint: browser pages must not control model
+            # residency or start inference on a loopback service.
+            if 'Origin' in self.headers:
+                return self.reply(403, dict(error='Browser origins are not supported'))
+            content_type = self.headers.get_content_type()
+            expected = {'/warm': 'application/json',
+                        '/v1/audio/transcriptions': 'multipart/form-data'}.get(self.path)
+            if expected is None:
+                return self.reply(404, dict(error='Not found'))
+            if content_type != expected:
+                return self.reply(415, dict(error='Unsupported content type'))
             size = int(self.headers.get('Content-Length', '0'))
             if size <= 0 or size > 20*1024*1024:
                 return self.reply(413, dict(error='Invalid request size'))

@@ -1,11 +1,9 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
-using Microsoft.Win32;
 
 static class Setup
 {
-    const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenVoxKeys";
     static readonly string InstallPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "OpenVoxKeys");
     static readonly string ProductExe = Path.Combine(InstallPath, "OpenVoxKeys.exe");
 
@@ -81,7 +79,9 @@ static class Setup
         foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script }.Concat(switches)) start.ArgumentList.Add(a);
         using var p = Process.Start(start) ?? throw new IOException("Could not start the installation helper.");
         var output = p.StandardOutput.ReadToEndAsync(); var errors = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(120000)) { p.Kill(); throw new IOException("Installation timed out. Check free disk space and retry."); }
+        // The helper owns rollback. Killing it during a slow file/registry operation
+        // can strand the reserved installation directory. Let the transaction finish.
+        p.WaitForExit();
         Task.WaitAll(output, errors);
         if (p.ExitCode != 0) throw new IOException(errors.Result.Trim().Length > 0 ? errors.Result.Trim() : output.Result.Trim());
     }
@@ -90,26 +90,14 @@ static class Setup
         string source = Extract();
         try
         {
-            RunScript(Path.Combine(source, "tools", "Install.ps1"), autostart ? new[] { "-Autostart" } : new[] { "-DisableAutostart" });
-            string installer = Path.Combine(InstallPath, "OpenVoxKeysSetup.exe");
-            if (!string.Equals(Environment.ProcessPath, installer, StringComparison.OrdinalIgnoreCase)) File.Copy(Environment.ProcessPath!, installer, true);
-            using var key = Registry.CurrentUser.CreateSubKey(UninstallKey);
-            key.SetValue("DisplayName", "Open Vox Keys");
-            key.SetValue("DisplayVersion", FileVersionInfo.GetVersionInfo(ProductExe).ProductVersion ?? "preview");
-            key.SetValue("Publisher", "Christian Haberl");
-            key.SetValue("InstallLocation", InstallPath);
-            key.SetValue("DisplayIcon", ProductExe);
-            key.SetValue("UninstallString", "\"" + installer + "\" --uninstall");
-            key.SetValue("URLInfoAbout", "https://github.com/christianhaberl/open-vox-keys");
-            key.SetValue("NoModify", 1, RegistryValueKind.DWord);
-            key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+            RunScript(Path.Combine(source, "tools", "Install.ps1"),
+                autostart ? "-Autostart" : "-DisableAutostart", "-SetupExecutable", Environment.ProcessPath!);
         }
         finally { Directory.Delete(source, true); }
     }
     static void Remove()
     {
         RunScript(Path.Combine(InstallPath, "tools", "Install.ps1"), "-Uninstall");
-        Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false);
     }
     static void VerifyPackage()
     {

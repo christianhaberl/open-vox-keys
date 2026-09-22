@@ -2,6 +2,17 @@
 
 Versions follow Semantic Versioning. Prereleases may change configuration and APIs.
 
+## 0.3.0-beta.3 — 2026-09-23
+
+- Reject premature streaming finals and preserve nonzero audio despite VAD false negatives.
+- Bound idle/long gateway sessions and preserve complete stream fallback on batch deadlines.
+- Restrict native ASR APIs against browser-origin requests; update aiohttp to 3.14.3.
+- Keep logging failures nonfatal, surface microphone stops, and back up unreadable settings.
+- Recover cleanly when a test recording disappears before comparison.
+- Stage upgrades and removals with rollback and serialized installer registration.
+- Rebuild embedded installer payloads to avoid stale-package release drift.
+- Add targeted fault tests and a [multi-reviewer audit](docs/audit-2026-09-23.md).
+
 ## 0.3.0-beta.2 — 2026-09-23
 
 - Add a self-contained graphical Windows installer with autostart selection and Installed apps removal.

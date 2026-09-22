@@ -9,13 +9,13 @@ machine on your network, or a cloud provider. No account or subscription to this
 project is required. You supply the transcription endpoint; model weights are
 not included.
 
-**0.3.0-beta.1 — Windows preview.** The preceding preview is in daily use.
+**Windows beta.** The app is in daily use by its maintainer.
 This is an unsigned early release, not a claim of compatibility with every app.
 macOS and Linux clients are planned; they are not implemented.
 
 ## Install
 
-Download [OpenVoxKeys-0.3.0-beta.2-Setup.exe](https://github.com/christianhaberl/open-vox-keys/releases/download/v0.3.0-beta.2/OpenVoxKeys-0.3.0-beta.2-Setup.exe),
+Download [OpenVoxKeys-0.3.0-beta.3-Setup.exe](https://github.com/christianhaberl/open-vox-keys/releases/download/v0.3.0-beta.3/OpenVoxKeys-0.3.0-beta.3-Setup.exe),
 double-click it, and choose **Install**. Quit an already running Open Vox Keys
 from its tray menu before upgrading. The installer includes an autostart checkbox,
 a Start menu shortcut, and an entry in Windows **Installed apps** for removal.
@@ -75,7 +75,8 @@ recording to its configured file endpoint. No LLM synthesis is involved.
   **Last dictation → Copy** instead of automatic insertion.
 - Choose the microphone in **Settings**; the tray **Microphones** list shows IDs.
 - `KeepFallbackWarm` controls the optional loopback Parakeet adapter only.
-- Uninstall with the installed `tools\Install.ps1 -Uninstall`. Settings and
+- Uninstall through Windows **Installed apps** after a GUI installation, or with
+  the installed `tools\Install.ps1 -Uninstall`. Settings and
   recordings are deliberately retained; delete them yourself if no longer needed.
 
 Audio normally stays in memory. Failed dictations may be saved in
@@ -110,7 +111,8 @@ and SHA-256 checksum files. See
 The tray **Test mode** opens a guided recording/comparison window with editable
 English prompts and a language setting. It sends the same recording to selected
 models **serially**, optionally warming each first. Keys stay in memory in this
-window. HTTP response timing does not equal hotkey-release latency. Correct the
+window. Its recorder uses the Windows default microphone, independently of the
+dictation microphone selected in Settings. HTTP response timing does not equal hotkey-release latency. Correct the
 reference to what you actually said; this window does not calculate WER.
 
 For capture only, run `python tools/recording-web/serve.py` and open
