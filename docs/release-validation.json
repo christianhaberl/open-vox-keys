@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0-beta.1",
+  "version": "0.3.0-beta.2",
   "target": "Windows x64",
-  "status": "private release candidate; publication requires approval",
+  "status": "prerelease candidate; publication requires maintainer approval",
   "client_protocol_cases": [
     "valid primary",
     "wrong sample count",
@@ -9,7 +9,11 @@
     "disconnect",
     "backend error",
     "cancel without fallback",
-    "direct file ASR"
+    "direct file ASR",
+    "empty primary invokes fallback",
+    "both backends empty fail visibly",
+    "digital silence avoids fallback",
+    "unusably quiet input avoids fallback after primary failure"
   ],
   "selftest_cases": [
     "hotkey transitions",
@@ -20,15 +24,18 @@
     "corrupt settings retained",
     "invalid endpoint rejected"
   ],
-  "python_tests": 11,
+  "python_tests": 13,
   "validation_commands": [
     "dotnet restore --locked-mode",
     "dotnet build -c Release --no-restore",
     "powershell -File tools/Test.ps1",
-    "python -m unittest discover -s backend -p test_*.py"
+    "python -m unittest discover -s backend -p test_*.py",
+    "powershell -File tools/Publish.ps1",
+    "powershell -File tools/BuildSetup.ps1",
+    "powershell -File tools/TestInstall.ps1 (disposable CI runner only)"
   ],
-  "production_installation": "Previous 0.2.1 left running; candidate tests do not replace it.",
-  "manual_acceptance": "Prior preview: user confirmed live dictation/insertion and icon. New candidate: packaging and protocol tests; no new live microphone acceptance claim.",
+  "production_installation": "GUI upgrade verified on development Windows PC; settings retained, autostart and Installed apps registration verified.",
+  "manual_acceptance": "User confirmed live microphone dictation on beta.2 reliability fix; subsequent GUI-installed build logged primary result and input submission. No reboot test.",
   "limitations": [
     "unsigned preview",
     "Windows x64",

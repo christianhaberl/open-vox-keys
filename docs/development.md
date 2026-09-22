@@ -85,3 +85,24 @@ set. English reading scripts are suggestions, not verified ground truth.
 German strings in Unicode and segmentation tests are intentional multilingual
 fixtures. `VOICE_POC_*` environment names and the old mutex/log names remain for
 compatibility with private previews; they do not select a private endpoint.
+
+
+## 0.3.0-beta.2 reliability and setup checks
+
+The client protocol suite now contains eleven cases, including empty primary
+results, both backends returning empty text, digital silence and unusably quiet
+input. The backend suite contains thirteen tests. Empty primary output triggers
+a configured fallback; exhausted failures produce a persistent error window.
+Extremely quiet input is rejected only after the primary fails.
+
+`tools/BuildSetup.ps1` embeds the portable package into a self-contained GUI
+installer and executes its payload checks. Windows CI additionally exercises
+`tools/TestInstall.ps1` on a disposable runner: installation, autostart on/off,
+configuration preservation, removal and personal-data retention. That destructive
+lifecycle test refuses to run over an existing installation/settings file.
+
+The beta.2 GUI was used to upgrade the development workstation; installed
+version, unchanged settings, Start menu shortcut, Run key and Installed apps
+registration were verified. An ensuing dictation logged a complete primary
+result and input submission. This does not claim a reboot test, universal input
+compatibility, or a completed GUI-uninstall test on that workstation.

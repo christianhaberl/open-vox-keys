@@ -6,10 +6,10 @@
    A source scan is not proof that every possible secret has been found.
 3. Run Windows and backend CI from the exact release commit. Review changes to
    keyboard handling and manually exercise them in an isolated window.
-4. Build with `tools/Publish.ps1` from a clean checkout. Verify package tests,
+4. Build with `tools/Publish.ps1` and `tools/BuildSetup.ps1` from a clean checkout. Verify package tests,
    installation, executable version, embedded icon, and SHA-256. The ZIP includes
    the runtime and third-party notices. Do not package local settings or models.
-5. Create a **draft prerelease** with the version, exact commit, ZIP, checksum,
+5. Create a **draft prerelease** with the version, exact commit, Setup EXE, ZIP, checksums,
    validation evidence, and known limitations. Review the draft before publishing.
 6. Publish only after maintainer approval. Repository visibility changes are a
    separate deliberate operation; no workflow changes visibility or publishes releases.
