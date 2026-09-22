@@ -1,7 +1,7 @@
 {
   "version": "0.3.0-beta.2",
   "target": "Windows x64",
-  "status": "prerelease candidate; publication requires maintainer approval",
+  "status": "validated prerelease; maintainer authorized publication",
   "client_protocol_cases": [
     "valid primary",
     "wrong sample count",

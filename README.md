@@ -15,11 +15,15 @@ macOS and Linux clients are planned; they are not implemented.
 
 ## Install
 
-For builds offering `OpenVoxKeys-<version>-Setup.exe`, double-click the installer
-and choose **Install**. It includes an autostart checkbox, a Start menu shortcut,
-and an entry in Windows **Installed apps** for removal. No terminal commands are
-needed. The setup is unsigned, like the portable app. The original beta.1 release
-has only the portable ZIP; the graphical installer is new in beta.2.
+Download [OpenVoxKeys-0.3.0-beta.2-Setup.exe](https://github.com/christianhaberl/open-vox-keys/releases/download/v0.3.0-beta.2/OpenVoxKeys-0.3.0-beta.2-Setup.exe),
+double-click it, and choose **Install**. Quit an already running Open Vox Keys
+from its tray menu before upgrading. The installer includes an autostart checkbox,
+a Start menu shortcut, and an entry in Windows **Installed apps** for removal.
+Your existing settings are preserved. No terminal commands are needed.
+The setup is unsigned, like the portable app. Installer visual polish and
+high-DPI layout improvements are tracked in [issue #12](https://github.com/christianhaberl/open-vox-keys/issues/12).
+
+### Portable alternative
 
 Download the Windows x64 ZIP from [Releases](https://github.com/christianhaberl/open-vox-keys/releases),
 verify its SHA-256 against the accompanying checksum file, and extract it.

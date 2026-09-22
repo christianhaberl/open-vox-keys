@@ -2,7 +2,7 @@
 
 Versions follow Semantic Versioning. Prereleases may change configuration and APIs.
 
-## 0.3.0-beta.2 — Unreleased
+## 0.3.0-beta.2 — 2026-09-23
 
 - Add a self-contained graphical Windows installer with autostart selection and Installed apps removal.
 - Report extremely quiet input after ASR failure instead of sending unusable audio to a cold fallback.
