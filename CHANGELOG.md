@@ -2,7 +2,17 @@
 
 Versions follow Semantic Versioning. Prereleases may change configuration and APIs.
 
-## 0.3.0-beta.1 — Release candidate
+## 0.3.0-beta.2 — Unreleased
+
+- Reject empty gateway transcripts and try the configured file ASR once.
+- Show a persistent error window for failed dictations, including empty ASR results.
+- Detect missing microphone samples and digital silence before file fallback;
+  record sample count, peak, and RMS diagnostics without logging speech content.
+- Treat empty section-ASR results with detected speech as failures; use the
+  complete streaming transcript or request file fallback.
+- Add regression cases for empty results and silent microphone input.
+
+## 0.3.0-beta.1 — 2026-09-14
 
 - English first-run settings, tray UI, recording tools, and documentation.
 - OpenVoxKeys executable name and user-supplied app/tray icon.

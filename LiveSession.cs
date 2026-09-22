@@ -18,13 +18,22 @@ sealed class LiveSession : IDisposable
     readonly Task<string> remote;
     string liveText = "";
     int sectionCount;
+    long sampleCount;
+    int samplePeak;
+    double squareSum;
+    public string AudioSummary { get { lock (audioLock) return $"samples={sampleCount} peak={samplePeak} rms={Math.Sqrt(squareSum / Math.Max(1, sampleCount)):F2}"; } }
     bool stopped;
     bool disposed;
     public string Source { get; private set; } = "";
     public LiveSession(DictationSettings settings, Action<string> preview, Action<string> progress) { this.settings = settings; this.preview = preview; this.progress = progress; remote = string.IsNullOrWhiteSpace(settings.GatewayUrl) ? Task.FromResult("") : Remote(); }
     public void Feed(byte[] bytes)
     {
-        lock (audioLock) { if (stopped) return; audio.Write(bytes); }
+        lock (audioLock)
+        {
+            if (stopped) return;
+            audio.Write(bytes);
+            for (int i = 0; i + 1 < bytes.Length; i += 2) { int sample = BitConverter.ToInt16(bytes, i); samplePeak = Math.Max(samplePeak, Math.Abs(sample)); squareSum += (double)sample * sample; sampleCount++; }
+        }
         if (settings.GatewayUrl.Length > 0 && !frames.Writer.TryWrite(bytes))
         {
             // Backpressure fails remote path; original PCM remains available for fallback.
@@ -60,7 +69,9 @@ sealed class LiveSession : IDisposable
                         long expected; lock (audioLock) expected = audio.Length / 2;
                         if (!e.TryGetProperty("samples", out var sampleCount) || !sampleCount.TryGetInt64(out long actual) || actual != expected) throw new IOException("Gateway result does not cover the complete recording.");
                         Source = e.GetProperty("source").GetString() ?? "gateway";
-                        return e.GetProperty("text").GetString()?.Trim() ?? "";
+                        string finalText = e.GetProperty("text").GetString()?.Trim() ?? "";
+                        if (finalText.Length == 0) throw new IOException("Gateway returned an empty transcript.");
+                        return finalText;
                 }
             }
             throw new OperationCanceledException();
@@ -80,6 +91,12 @@ sealed class LiveSession : IDisposable
     {
         lock (audioLock) stopped = true;
         frames.Writer.TryComplete();
+        cancel.Token.ThrowIfCancellationRequested();
+        lock (audioLock)
+        {
+            if (sampleCount == 0) throw new IOException("No microphone samples received. Check the selected microphone and Windows microphone permissions.");
+            if (samplePeak == 0) throw new IOException("The microphone delivered digital silence. Check hardware mute, input gain and the selected audio input. No fallback can recover missing audio.");
+        }
         if (string.IsNullOrWhiteSpace(settings.GatewayUrl)) return await FileTranscription();
         try { return await remote.WaitAsync(TimeSpan.FromSeconds(settings.FinishTimeoutSeconds + 5), cancel.Token); }
         catch (Exception) when (!cancel.IsCancellationRequested)
@@ -102,7 +119,9 @@ sealed class LiveSession : IDisposable
         using var body = new MultipartFormDataContent(); var part = new ByteArrayContent(wav.ToArray()); part.Headers.ContentType = new("audio/wav"); body.Add(part, "file", "dictation.wav"); body.Add(new StringContent(settings.FallbackModel), "model"); body.Add(new StringContent(settings.Language), "language"); body.Add(new StringContent("json"), "response_format");
         using var response = await http.PostAsync(settings.FallbackUrl, body, cancel.Token); response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancel.Token)); Source = settings.GatewayUrl.Length == 0 ? "file-asr" : "file-fallback";
-        return doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
+        string text = doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
+        if (text.Length == 0) throw new IOException("The ASR provider returned no text. Check microphone input and level; the recording is retained for recovery.");
+        return text;
     }
     public string SaveRecovery()
     {

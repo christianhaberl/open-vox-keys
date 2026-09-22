@@ -184,8 +184,8 @@ async def websocket(request):
                         r.raise_for_status()
                         answer = await r.json()
                         text = answer['text']
-                        if not isinstance(text, str):
-                            raise ValueError('Missing text')
+                        if not isinstance(text, str) or not text.strip():
+                            raise ValueError('Empty transcript for a section with detected speech')
                         row.update(text=text.strip(), ok=True)
                 except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError, ValueError, KeyError):
                     batch_failed = True
@@ -242,6 +242,10 @@ async def websocket(request):
                     text, source = stream_final.strip(), 'voxtral-fallback'
                 else:
                     raise RuntimeError('No complete transcript; file ASR fallback required.')
+                if not text.strip() and stream_final and msg.get('stream_fallback', True):
+                    text, source = stream_final.strip(), 'voxtral-fallback'
+                if not text.strip() and voiced:
+                    raise RuntimeError('Speech detected but ASR returned no text; file ASR fallback required.')
                 await emit(dict(type='result', text=text, source=source, sections=len(results), samples=len(pcm)//2))
                 break
         if not stopped:

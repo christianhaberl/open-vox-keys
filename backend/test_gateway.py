@@ -16,18 +16,18 @@ class FakeVad:
 
 
 class Gateway(unittest.IsolatedAsyncioTestCase):
-    async def setup_gateway(self, batch_ok=True, stream_ok=True):
+    async def setup_gateway(self, batch_ok=True, stream_ok=True, batch_text="Batch complete.", stream_text="Stream complete."):
         async def batch(r):
             await r.read()
             if not batch_ok:
                 raise web.HTTPServiceUnavailable()
-            return web.json_response(dict(text='Batch complete.'))
+            return web.json_response(dict(text=batch_text))
         async def stream(r):
             await r.read()
             if not stream_ok:
                 raise web.HTTPServiceUnavailable()
-            messages = [dict(type='transcript.text.delta', delta='Stream complete.'),
-                        dict(type='transcript.text.done', text='Stream complete.')]
+            messages = [dict(type='transcript.text.delta', delta=stream_text),
+                        dict(type='transcript.text.done', text=stream_text)]
             return web.Response(text=''.join('data: '+json.dumps(m)+'\n\n' for m in messages)+'data: [DONE]\n\n', content_type='text/event-stream')
         backend = web.Application()
         backend.router.add_post('/inference', batch)
@@ -85,6 +85,18 @@ class Gateway(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e['type']=='result' for e in events))
         self.assertTrue(any(e['type']=='error' for e in events))
         self.assertFalse(self.gateway.app['busy'])
+
+    async def test_empty_batch_uses_complete_stream(self):
+        await self.setup_gateway(batch_text='  ')
+        finals=[e for e in await self.run_dictation() if e['type']=='result']
+        self.assertEqual(finals[0]['source'],'voxtral-fallback')
+        self.assertEqual(finals[0]['text'],'Stream complete.')
+
+    async def test_both_empty_with_speech_is_error(self):
+        await self.setup_gateway(batch_text='',stream_text='')
+        events=await self.run_dictation()
+        self.assertFalse(any(e['type']=='result' for e in events))
+        self.assertTrue(any(e['type']=='error' for e in events))
 
     async def test_disconnect_releases_busy(self):
         await self.setup_gateway()

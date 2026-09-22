@@ -115,7 +115,7 @@ sealed class Dictation : OrbWindow
         cancelled = false; insertionCancelled = false; insertionTarget = TextInsertion.Capture(); output.Clear(); LiveText = ""; PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
         try
         {
-            var active = new LiveSession(settings, text => Ui(() => { if (recording && !cancelled) LiveText = text; }), text => Ui(() => { if (!cancelled) status.Text = text; })); session = active;
+            var active = new LiveSession(settings, text => Ui(() => { if (recording && !cancelled) LiveText = text; }), text => Ui(() => { if (!cancelled) { status.Text = text; if (busy) Notice(); } })); session = active;
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); captureStopped = done;
             var input = new WaveInEvent { DeviceNumber = settings.MicrophoneDevice, WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 64, NumberOfBuffers = 4 }; microphone = input;
             input.DataAvailable += (_, e) => { byte[] bytes = e.Buffer[..e.BytesRecorded]; active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
@@ -133,7 +133,8 @@ sealed class Dictation : OrbWindow
         {
             input?.StopRecording(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
             input?.Dispose(); microphone = null;
-            string text = await active!.Finish(); if (cancelled) return;
+            Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice);
+            string text = await active.Finish(); if (cancelled) return;
             output.Text = text; status.Text = text.Length == 0 ? "No speech detected." : $"Done · {watch.Elapsed.TotalSeconds:F1} s · {active.Source}";
             Log("result source=" + active.Source + " release_s=" + watch.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + " chars=" + text.Length);
             if (text.Length > 0)
@@ -147,7 +148,7 @@ sealed class Dictation : OrbWindow
                 else if (!cancelled) { status.Text = "Text ready — focus or input changed. Use Copy to insert it."; Log("insertion-skipped"); Notice(); }
             }
         }
-        catch (Exception e) { if (!cancelled) { status.Text = "Error — " + e.Message; try { string saved = active?.SaveRecovery() ?? ""; if (saved.Length > 0) status.Text += " · Recording saved in OpenVoxKeys/Recovery."; } catch (Exception) { status.Text += " · Could not save the recording."; } Log("error " + e.Message); Notice(); } }
+        catch (Exception e) { if (!cancelled) { status.Text = "Error — " + e.Message; try { string saved = active?.SaveRecovery() ?? ""; if (saved.Length > 0) status.Text += " · Recording saved in OpenVoxKeys/Recovery."; } catch (Exception) { status.Text += " · Could not save the recording."; } Log("error " + e.Message); Notice(); details.Show(); } }
         finally { input?.Dispose(); active?.Dispose(); session = null; microphone = null; busy = false; }
     }
     void Notice() => tray.ShowBalloonTip(4000, "Open Vox Keys", status.Text, ToolTipIcon.Info);
