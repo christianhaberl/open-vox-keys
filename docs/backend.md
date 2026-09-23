@@ -171,3 +171,13 @@ or stop message, or after 660 seconds of wall time. Operators can set
 `capture_idle_seconds` and `capture_max_seconds` in the gateway configuration.
 The independent PCM limit remains ten minutes. These are capture limits; final
 ASR processing uses the separate client-provided completion timeouts.
+
+### Streaming-only output
+
+Set `"batch_enabled": false` in the gateway configuration and restart the gateway
+to use the complete Voxtral stream as the final output. The gateway sends no
+audio to the batch backend in this mode; live preview remains available. The
+Windows client does not need an update. The default is `true` (batch sections
+with complete-stream fallback). A configured client file-ASR fallback still
+applies if streaming fails. Remove its URL in client Settings if strict
+single-model operation is required.

@@ -59,6 +59,8 @@ async def health(request):
     states = {}
     for name, url in [('stream', app['config']['stream_url'].split('/v1/')[0] + '/health'),
                       ('batch', app['config']['batch_url'].rsplit('/', 1)[0] + '/')]:
+        if name == 'batch' and not app['config'].get('batch_enabled', True):
+            continue
         try:
             async with app['http'].get(url, timeout=aiohttp.ClientTimeout(total=2)) as r:
                 states[name] = r.status == 200
@@ -80,6 +82,7 @@ async def websocket(request):
     tasks = []
     send_lock = asyncio.Lock()
     cfg = app['config']
+    batch_enabled = cfg.get('batch_enabled', True)
     pcm = bytearray()
     stream_final = None
     stream_failed = False
@@ -113,7 +116,8 @@ async def websocket(request):
             for e in items:
                 if e.get('type') == 'segment' and e.get('lane') == chosen:
                     if e['end'] > e['start']:
-                        work.put_nowait(dict(e, pcm=bytes(pcm[e['start']*2:e['end']*2]), has_speech=any(e['start'] <= t < e['end'] for t in voiced)))
+                        if batch_enabled:
+                            work.put_nowait(dict(e, pcm=bytes(pcm[e['start']*2:e['end']*2]), has_speech=any(e['start'] <= t < e['end'] for t in voiced)))
                         await emit(e)
 
         async def upload():
@@ -162,7 +166,7 @@ async def websocket(request):
                 seg.lanes[chosen].signals = ('vad', 'length')
                 seg.lanes[chosen].combine = 'or'
                 seg.lanes[chosen].pending = None
-                await emit(dict(type='warning', text='Voxtral unavailable; continuing with speech pauses.'))
+                await emit(dict(type='warning', text='Voxtral unavailable; continuing with speech pauses.' if batch_enabled else 'Voxtral unavailable; no complete streaming transcript.'))
 
         async def batch():
             nonlocal batch_failed
@@ -206,8 +210,10 @@ async def websocket(request):
                 await emit(dict(type='section_result', number=row['number'], text=row['text'], ok=row['ok']))
 
         st = asyncio.create_task(streaming())
-        bt = asyncio.create_task(batch())
-        tasks.extend((st, bt))
+        bt = asyncio.create_task(batch()) if batch_enabled else None
+        tasks.append(st)
+        if bt is not None:
+            tasks.append(bt)
         await emit(dict(type='ready'))
         processed = 0
         loop = asyncio.get_running_loop()
@@ -254,12 +260,17 @@ async def websocket(request):
                         stream_final = None
                         stream_failed = True
                 await events(seg.finish(len(pcm)//2))
-                work.put_nowait(None)
-                try:
-                    await asyncio.wait_for(bt, float(msg.get('finish_timeout_s', 25)))
-                except asyncio.TimeoutError:
-                    batch_failed = True
-                if not batch_failed and results:
+                if bt is not None:
+                    work.put_nowait(None)
+                    try:
+                        await asyncio.wait_for(bt, float(msg.get('finish_timeout_s', 25)))
+                    except asyncio.TimeoutError:
+                        batch_failed = True
+                if not batch_enabled:
+                    if stream_final is None:
+                        raise RuntimeError('No complete Voxtral transcript; file ASR fallback required.')
+                    text, source = stream_final.strip(), 'voxtral'
+                elif not batch_failed and results:
                     text = ' '.join(r['text'] for r in results if r['text'])
                     source = 'whisper'
                 elif stream_final is not None and msg.get('stream_fallback', True):

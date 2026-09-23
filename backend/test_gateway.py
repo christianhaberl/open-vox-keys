@@ -64,6 +64,22 @@ class Gateway(unittest.IsolatedAsyncioTestCase):
                     out.append(json.loads(msg.data))
         return out
 
+    async def test_voxtral_only_never_calls_batch(self):
+        await self.setup_gateway(config={'batch_enabled': False})
+        finals = [e for e in await self.run_dictation() if e['type'] == 'result']
+        self.assertEqual(len(finals), 1)
+        self.assertEqual(finals[0]['source'], 'voxtral')
+        self.assertEqual(finals[0]['text'], 'Stream complete.')
+        self.assertEqual(finals[0]['samples'], 32000)
+        self.assertEqual(self.batch_calls, 0)
+
+    async def test_voxtral_only_failure_does_not_use_batch(self):
+        await self.setup_gateway(config={'batch_enabled': False}, stream_ok=False)
+        events = await self.run_dictation()
+        self.assertTrue(any(e['type'] == 'error' for e in events))
+        self.assertFalse(any(e['type'] == 'result' for e in events))
+        self.assertEqual(self.batch_calls, 0)
+
     async def test_primary_success(self):
         await self.setup_gateway()
         events=await self.run_dictation()

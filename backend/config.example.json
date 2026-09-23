@@ -4,6 +4,7 @@
   "vad_model": "/path/to/silero_vad_v6.onnx",
   "stream_url": "http://127.0.0.1:19044/v1/audio/transcriptions/live",
   "stream_model": "voxtral-stream",
+  "batch_enabled": true,
   "batch_url": "http://127.0.0.1:19115/inference",
   "batch_model": "",
   "api_key": ""
