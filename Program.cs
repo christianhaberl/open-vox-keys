@@ -32,6 +32,7 @@ sealed class Dictation : OrbWindow
     bool recording, busy, cancelled; DateTime started;
     // Each dictation gets a generation; a superseded job must not touch the state of its successor.
     int generation;
+    Func<long> firstAudioMs = () => -1;
     DictationSettings settings = new(); LiveSession? session; WaveInEvent? microphone;
     TaskCompletionSource? captureStopped;
     public Dictation(string[] args)
@@ -135,13 +136,14 @@ sealed class Dictation : OrbWindow
     {
         if (recording || busy) return;
         generation++;
-        cancelled = false; insertionCancelled = false; insertionTarget = TextInsertion.Capture(); output.Clear(); LiveText = ""; PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
+        var press = Stopwatch.StartNew(); long firstAudio = -1; firstAudioMs = () => Interlocked.Read(ref firstAudio);
+        cancelled = false; insertionCancelled = false; insertionTarget = TextInsertion.Capture(); output.Clear(); LiveText = "";
         try
         {
             var active = new LiveSession(settings, text => Ui(() => { if (recording && !cancelled) LiveText = text; }), text => Ui(() => { if (!cancelled) { status.Text = text; if (busy) Notice(); } })); session = active;
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); captureStopped = done;
             var input = new WaveInEvent { DeviceNumber = settings.MicrophoneDevice, WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 64, NumberOfBuffers = 4 }; microphone = input;
-            input.DataAvailable += (_, e) => { byte[] bytes = e.Buffer[..e.BytesRecorded]; active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
+            input.DataAvailable += (_, e) => { if (e.BytesRecorded > 0) Interlocked.CompareExchange(ref firstAudio, press.ElapsedMilliseconds, -1); byte[] bytes = e.Buffer[..e.BytesRecorded]; active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
             input.RecordingStopped += (_, e) =>
             {
                 if (e.Exception == null) { done.TrySetResult(); return; }
@@ -153,7 +155,10 @@ sealed class Dictation : OrbWindow
                     if (recording && !cancelled && ReferenceEquals(microphone, input)) Stop();
                 });
             };
-            recording = true; started = DateTime.UtcNow; input.StartRecording(); Log("recording-start streaming=true");
+            // Microphone first, overlay second: drawing the orb must not delay capture of the first syllable.
+            recording = true; started = DateTime.UtcNow; input.StartRecording(); long micMs = press.ElapsedMilliseconds;
+            PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
+            Log("recording-start streaming=true mic_ms=" + micMs + " orb_ms=" + press.ElapsedMilliseconds);
         }
         catch (Exception e) { recording = false; microphone?.Dispose(); microphone = null; session?.Dispose(); session = null; status.Text = "Microphone error: " + e.Message; Log("recording-error " + e.Message); Hide(); Notice(); }
     }
@@ -161,13 +166,13 @@ sealed class Dictation : OrbWindow
     {
         if (!recording) return;
         recording = false; busy = true; Hide(); status.Text = "Finishing the last section …"; var watch = Stopwatch.StartNew();
-        var active = session; var input = microphone; var done = captureStopped; int job = generation;
+        var active = session; var input = microphone; var done = captureStopped; int job = generation; var audioStart = firstAudioMs;
         bool Current() => job == generation && !cancelled;
         try
         {
             input?.StopRecording(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
             input?.Dispose(); if (job == generation) microphone = null;
-            Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice);
+            Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice + " first_audio_ms=" + audioStart());
             if (settings.SilencePeak > 0 && active.Peak < settings.SilencePeak)
             {
                 // Nothing audible was captured: do not occupy the ASR path, report at once.
