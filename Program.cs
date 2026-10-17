@@ -30,6 +30,8 @@ sealed class Dictation : OrbWindow
     readonly string log = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VoicePoc.log");
     TextInsertion.Target insertionTarget; bool insertionCancelled;
     bool recording, busy, cancelled; DateTime started;
+    // Each dictation gets a generation; a superseded job must not touch the state of its successor.
+    int generation;
     DictationSettings settings = new(); LiveSession? session; WaveInEvent? microphone;
     TaskCompletionSource? captureStopped;
     public Dictation(string[] args)
@@ -71,7 +73,8 @@ sealed class Dictation : OrbWindow
             bool win = Native.GetAsyncKeyState(0x5B) < 0 || Native.GetAsyncKeyState(0x5C) < 0;
             if (recording || busy) { if (TextInsertion.Capture() != insertionTarget || TextInsertion.OtherInputDown()) insertionCancelled = true; }
             int action = chordState.Update(ctrl, win);
-            if (action == 1 && !busy && !recording) Start();
+            // The hotkey is never ignored: a press while a result is pending supersedes that job.
+            if (action == 1 && !recording) { if (busy) Supersede(); Start(); }
             if (action == -1) Stop();
             if ((recording || busy) && Native.GetAsyncKeyState(0x1B) < 0) Cancel();
             if (recording && DateTime.UtcNow - started > TimeSpan.FromMinutes(10)) Stop();
@@ -121,9 +124,17 @@ sealed class Dictation : OrbWindow
         catch (Exception) { status.Text = "Gateway unavailable. File ASR: " + (settings.FallbackUrl.Length > 0 ? "configured" : "not configured"); }
         Notice();
     }
+    void Supersede()
+    {
+        var old = session; string saved = "";
+        try { saved = old?.SaveRecovery() ?? ""; } catch (Exception) { }
+        old?.Cancel(); session = null; microphone = null; busy = false;
+        Log("superseded pending dictation" + (saved.Length > 0 ? " recovery-saved" : ""));
+    }
     void Start()
     {
         if (recording || busy) return;
+        generation++;
         cancelled = false; insertionCancelled = false; insertionTarget = TextInsertion.Capture(); output.Clear(); LiveText = ""; PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
         try
         {
@@ -150,28 +161,34 @@ sealed class Dictation : OrbWindow
     {
         if (!recording) return;
         recording = false; busy = true; Hide(); status.Text = "Finishing the last section …"; var watch = Stopwatch.StartNew();
-        var active = session; var input = microphone; var done = captureStopped;
+        var active = session; var input = microphone; var done = captureStopped; int job = generation;
+        bool Current() => job == generation && !cancelled;
         try
         {
             input?.StopRecording(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            input?.Dispose(); microphone = null;
+            input?.Dispose(); if (job == generation) microphone = null;
             Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice);
-            string text = await active.Finish(); if (cancelled) return;
+            if (settings.SilencePeak > 0 && active.Peak < settings.SilencePeak)
+            {
+                // Nothing audible was captured: do not occupy the ASR path, report at once.
+                active.Cancel(); status.Text = "No speech captured (microphone level too low). Nothing was sent."; Log("silence-skipped peak=" + active.Peak); Notice(); return;
+            }
+            string text = await active.Finish(); if (!Current()) return;
             output.Text = text; status.Text = text.Length == 0 ? "No speech detected." : $"Done · {watch.Elapsed.TotalSeconds:F1} s · {active.Source}";
             Log("result source=" + active.Source + " release_s=" + watch.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + " chars=" + text.Length);
             if (text.Length > 0)
             {
-                for (int n = 0; n < 50 && TextInsertion.ModifiersDown() && !cancelled && !insertionCancelled; n++) await Task.Delay(20);
+                for (int n = 0; n < 50 && TextInsertion.ModifiersDown() && Current() && !insertionCancelled; n++) await Task.Delay(20);
                 await Task.Delay(100);
-                if (!cancelled && !insertionCancelled && TextInsertion.TryInsert(insertionTarget, text))
+                if (Current() && !insertionCancelled && TextInsertion.TryInsert(insertionTarget, text))
                 {
                     status.Text = $"Inserted · {watch.Elapsed.TotalSeconds:F1} s · {active.Source}"; Log("unicode-input-submitted chars=" + text.Length); Hide();
                 }
-                else if (!cancelled) { status.Text = "Text ready — focus or input changed. Use Copy to insert it."; Log("insertion-skipped"); Notice(); }
+                else if (Current()) { status.Text = "Text ready — focus or input changed. Use Copy to insert it."; Log("insertion-skipped"); Notice(); }
             }
         }
-        catch (Exception e) { if (!cancelled) { status.Text = "Error — " + e.Message; try { string saved = active?.SaveRecovery() ?? ""; if (saved.Length > 0) status.Text += " · Recording saved in OpenVoxKeys/Recovery."; } catch (Exception) { status.Text += " · Could not save the recording."; } Log("error " + e.Message); Notice(); details.Show(); } }
-        finally { input?.Dispose(); active?.Dispose(); session = null; microphone = null; busy = false; }
+        catch (Exception e) { if (Current()) { status.Text = "Error — " + e.Message; try { string saved = active?.SaveRecovery() ?? ""; if (saved.Length > 0) status.Text += " · Recording saved in OpenVoxKeys/Recovery."; } catch (Exception) { status.Text += " · Could not save the recording."; } Log("error " + e.Message); Notice(); details.Show(); } }
+        finally { input?.Dispose(); active?.Dispose(); if (job == generation) { session = null; microphone = null; busy = false; } }
     }
     void Notice() => tray.ShowBalloonTip(4000, "Open Vox Keys", status.Text, ToolTipIcon.Info);
     void Cancel() { Hide(); cancelled = true; session?.Cancel(); if (recording) { Stop(); } status.Text = "Cancelled"; Log("cancelled"); }

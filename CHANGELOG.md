@@ -2,6 +2,11 @@
 
 Versions follow Semantic Versioning. Prereleases may change configuration and APIs.
 
+## Unreleased
+
+- Never ignore the hotkey: a press while a result is pending supersedes that dictation (recording saved to Recovery) and starts a new one.
+- Skip ASR for recordings below `SilencePeak` (default 300) and report it immediately instead of blocking on an empty result.
+
 ## 0.3.0-beta.3 — 2026-09-23
 
 - Reject premature streaming finals and preserve nonzero audio despite VAD false negatives.

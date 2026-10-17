@@ -22,6 +22,7 @@ sealed class LiveSession : IDisposable
     int samplePeak;
     double squareSum;
     public string AudioSummary { get { lock (audioLock) return $"samples={sampleCount} peak={samplePeak} rms={Math.Sqrt(squareSum / Math.Max(1, sampleCount)):F2}"; } }
+    public int Peak { get { lock (audioLock) return samplePeak; } }
     bool stopped;
     bool disposed;
     public string Source { get; private set; } = "";

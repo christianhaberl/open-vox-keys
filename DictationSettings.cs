@@ -25,6 +25,8 @@ sealed class DictationSettings
     public string FallbackApiKey { get; set; } = "";
     public double FallbackTimeoutSeconds { get; set; } = 90;
     public bool KeepFallbackWarm { get; set; } = false;
+    [Description("Recordings whose peak stays below this level are not sent to ASR (0 = off). Speech is typically above 1000.")]
+    public int SilencePeak { get; set; } = 300;
     public static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenVoxKeys", "settings.json");
     public static DictationSettings Load() => LoadFrom(FilePath);
     internal static DictationSettings LoadFrom(string path)
@@ -59,7 +61,7 @@ sealed class DictationSettings
     public void Validate()
     {
         foreach (var u in new[] { GatewayUrl, FallbackUrl }) if (u.Length > 0 && (!Uri.TryCreate(u, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) throw new Exception("Endpoints require http:// or https://.");
-        if (PauseSeconds is < .1 or > 3 || DecisionDelaySeconds is < 0 or > 5 || MaximumSectionSeconds is < 3 or > 60 || BatchTimeoutSeconds is < 1 or > 120 || FinishTimeoutSeconds is < 5 or > 180 || FallbackTimeoutSeconds is < 5 or > 300) throw new Exception("A timeout or segmentation value is outside the allowed range.");
+        if (PauseSeconds is < .1 or > 3 || DecisionDelaySeconds is < 0 or > 5 || MaximumSectionSeconds is < 3 or > 60 || BatchTimeoutSeconds is < 1 or > 120 || FinishTimeoutSeconds is < 5 or > 180 || FallbackTimeoutSeconds is < 5 or > 300 || SilencePeak is < 0 or > 10000) throw new Exception("A timeout or segmentation value is outside the allowed range.");
     }
     public void Save()
     {
