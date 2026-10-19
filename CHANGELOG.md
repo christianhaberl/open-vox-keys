@@ -11,6 +11,11 @@ Versions follow Semantic Versioning. Prereleases may change configuration and AP
 - When no gateway is reachable, the overlay says so ("Live preview unavailable") instead of staying empty; the file fallback still runs.
 - A recording with zero samples is reported as a microphone failure, not as silence.
 - If insertion is blocked (focus or input changed), the transcript is copied to the clipboard so it can be pasted with Ctrl+V.
+- WASAPI capture (`PreferWasapi`, default on) with automatic WaveIn fallback; warmed at start. Measured first audio 33–60 ms instead of 71–85 ms. A microphone on one input of a stereo interface keeps its level.
+- Built-in job watchdog: a dictation that outlives all configured timeouts is cancelled and its audio saved to Recovery.
+- A non-elevated instance tells the user once per window when an administrator window is in front, where Windows hides the hotkey.
+- Runs at normal priority even when started by Task Scheduler; logs UI timer gaps over 1 s (`timer-gap`).
+- `--test-capture` records 3 s per API and writes start latency, samples and level to `capture-test.txt`.
 
 ## 0.3.0-beta.3 — 2026-09-23
 

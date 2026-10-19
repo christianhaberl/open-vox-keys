@@ -14,6 +14,8 @@ sealed class DictationSettings
     public string Language { get; set; } = "en";
     [Description("-1 = Windows default microphone; see the tray microphone list for other device numbers.")]
     public int MicrophoneDevice { get; set; } = 0;
+    [Description("Capture through WASAPI (first audio after ~10-30 ms). Falls back to WaveIn automatically if the device cannot be opened.")]
+    public bool PreferWasapi { get; set; } = true;
     public bool StartWithWindows { get; set; } = false;
     public double PauseSeconds { get; set; } = .5;
     public double DecisionDelaySeconds { get; set; } = 1.2;

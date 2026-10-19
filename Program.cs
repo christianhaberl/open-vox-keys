@@ -9,6 +9,7 @@ static class Program
     static void Main(string[] args)
     {
         if (args.Contains("--test-session")) { SessionTests.Run(); return; }
+        if (args.Contains("--test-capture")) { Capture.Test(DictationSettings.Load().MicrophoneDevice); return; }
         if (args.Contains("--selftest")) { ChordState.Test(); TextInsertion.Validate(); SettingsTests.Run(); AppLog.Test(); if (AppBrand.Icon.Width <= 0) throw new Exception("Icon missing"); return; }
         ApplicationConfiguration.Initialize();
         if (args.Contains("--test-mode")) { Application.Run(new TestMode()); return; }
@@ -35,7 +36,18 @@ sealed class Dictation : OrbWindow
     // Each dictation gets a generation; a superseded job must not touch the state of its successor.
     int generation;
     Func<long> firstAudioMs = () => -1;
-    DictationSettings settings = new(); LiveSession? session; WaveInEvent? microphone;
+    DictationSettings settings = new(); LiveSession? session; Capture? microphone;
+    DateTime busySince;
+    nint elevatedNoticeWindow; int elevationCheck;
+    // Windows hides key state from a non-elevated app while an elevated window has focus; say so once per window.
+    void CheckElevatedForeground()
+    {
+        nint window = Elevation.ForegroundWindow(); if (window == 0 || window == elevatedNoticeWindow) return;
+        if (!Elevation.IsElevated(Elevation.WindowProcess(window))) return;
+        elevatedNoticeWindow = window; Log("elevated-foreground notice");
+        tray.ShowBalloonTip(4000, "Open Vox Keys", "Dictation is not available while an administrator window is in front. Start Open Vox Keys as administrator to dictate there.", ToolTipIcon.Info);
+    }
+    static readonly bool selfElevated = Elevation.IsElevated(Environment.ProcessId);
     TaskCompletionSource? captureStopped;
     public Dictation(string[] args)
     {
@@ -85,6 +97,9 @@ sealed class Dictation : OrbWindow
             if (action == -1) Stop();
             if ((recording || busy) && Native.GetAsyncKeyState(0x1B) < 0) Cancel();
             if (recording && DateTime.UtcNow - started > TimeSpan.FromMinutes(10)) Stop();
+            // Built-in job watchdog: no single dictation may hold the app longer than every timeout together.
+            if (busy && !recording && DateTime.UtcNow - busySince > TimeSpan.FromSeconds(settings.FinishTimeoutSeconds + settings.FallbackTimeoutSeconds + 15)) { Log("job-watchdog cancelled after " + (int)(DateTime.UtcNow - busySince).TotalSeconds + "s"); generation++; Supersede(); status.Text = "The last dictation took too long and was cancelled. Recording saved in OpenVoxKeys/Recovery."; Notice(); }
+            if (!selfElevated && (++elevationCheck % 40) == 0) CheckElevatedForeground();
         }; timer.Start();
         Shown += async (_, _) =>
         {
@@ -106,7 +121,7 @@ sealed class Dictation : OrbWindow
                 catch (Exception e) { Log("fixture-error " + e.Message); Environment.ExitCode = 1; }
                 busy = false; Close();
             }
-            else { await WarmFallback(); if (settings.GatewayUrl.Length == 0 && settings.FallbackUrl.Length == 0) { timer.Stop(); try { if (DictationSettings.Edit(details, settings)) settings = DictationSettings.Load(); } finally { timer.Start(); } } }
+            else { _ = Task.Run(() => global::Capture.Warm(settings.MicrophoneDevice)); await WarmFallback(); if (settings.GatewayUrl.Length == 0 && settings.FallbackUrl.Length == 0) { timer.Stop(); try { if (DictationSettings.Edit(details, settings)) settings = DictationSettings.Load(); } finally { timer.Start(); } } }
         };
     }
     void Ui(Action f) { if (!IsDisposed && IsHandleCreated) try { BeginInvoke(f); } catch (InvalidOperationException) { } }
@@ -148,12 +163,12 @@ sealed class Dictation : OrbWindow
         {
             var active = new LiveSession(settings, text => Ui(() => { if (recording && !cancelled) LiveText = text; }), text => Ui(() => { if (!cancelled) { status.Text = text; if (busy) Notice(); } })); session = active;
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); captureStopped = done;
-            var input = new WaveInEvent { DeviceNumber = settings.MicrophoneDevice, WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 64, NumberOfBuffers = 4 }; microphone = input;
-            input.DataAvailable += (_, e) => { if (e.BytesRecorded > 0) Interlocked.CompareExchange(ref firstAudio, press.ElapsedMilliseconds, -1); byte[] bytes = e.Buffer[..e.BytesRecorded]; active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
-            input.RecordingStopped += (_, e) =>
+            var input = new Capture(); microphone = input;
+            input.Data += bytes => { if (bytes.Length > 0) Interlocked.CompareExchange(ref firstAudio, press.ElapsedMilliseconds, -1); active.Feed(bytes); double sum = 0; for (int i = 0; i + 1 < bytes.Length; i += 2) { double x = BitConverter.ToInt16(bytes, i) / 32768.0; sum += x * x; } float level = (float)Math.Min(1, Math.Sqrt(sum / Math.Max(1, bytes.Length / 2)) * 7); Ui(() => AudioLevel = level); };
+            input.Stopped += error =>
             {
-                if (e.Exception == null) { done.TrySetResult(); return; }
-                done.TrySetException(e.Exception);
+                if (error == null) { done.TrySetResult(); return; }
+                done.TrySetException(error);
                 Ui(() =>
                 {
                     // A device failure must end capture even while the user holds the hotkey.
@@ -162,21 +177,21 @@ sealed class Dictation : OrbWindow
                 });
             };
             // Microphone first, overlay second: drawing the orb must not delay capture of the first syllable.
-            recording = true; started = DateTime.UtcNow; input.StartRecording(); long micMs = press.ElapsedMilliseconds;
+            recording = true; started = DateTime.UtcNow; input.Start(settings.MicrophoneDevice, settings.PreferWasapi); long micMs = press.ElapsedMilliseconds;
             PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
-            Log("recording-start streaming=true mic_ms=" + micMs + " orb_ms=" + press.ElapsedMilliseconds);
+            Log("recording-start streaming=true api=" + input.Api + " mic_ms=" + micMs + " orb_ms=" + press.ElapsedMilliseconds);
         }
         catch (Exception e) { recording = false; microphone?.Dispose(); microphone = null; session?.Dispose(); session = null; status.Text = "Microphone error: " + e.Message; Log("recording-error " + e.Message); Hide(); Notice(); }
     }
     async void Stop()
     {
         if (!recording) return;
-        recording = false; busy = true; Hide(); status.Text = "Finishing the last section …"; var watch = Stopwatch.StartNew();
+        recording = false; busy = true; busySince = DateTime.UtcNow; Hide(); status.Text = "Finishing the last section …"; var watch = Stopwatch.StartNew();
         var active = session; var input = microphone; var done = captureStopped; int job = generation; var audioStart = firstAudioMs;
         bool Current() => job == generation && !cancelled;
         try
         {
-            input?.StopRecording(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            input?.Stop(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
             input?.Dispose(); if (job == generation) microphone = null;
             Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice + " first_audio_ms=" + audioStart());
             if (active.SampleCount == 0)
@@ -214,7 +229,7 @@ sealed class Dictation : OrbWindow
     }
     void Notice() => tray.ShowBalloonTip(4000, "Open Vox Keys", status.Text, ToolTipIcon.Info);
     void Cancel() { Hide(); cancelled = true; session?.Cancel(); if (recording) { Stop(); } status.Text = "Cancelled"; Log("cancelled"); }
-    protected override void OnFormClosed(FormClosedEventArgs e) { timer.Stop(); cancelled = true; session?.Cancel(); microphone?.StopRecording(); tray.Dispose(); details.Dispose(); base.OnFormClosed(e); }
+    protected override void OnFormClosed(FormClosedEventArgs e) { timer.Stop(); cancelled = true; session?.Cancel(); microphone?.Stop(); tray.Dispose(); details.Dispose(); base.OnFormClosed(e); }
 }
 // Passive observation only: no hooks, suppression or synthetic keyboard input.
 sealed class ChordState
