@@ -16,6 +16,8 @@ static class Program
         if (args.Contains("--preview-overlay")) { Application.Run(OrbWindow.Preview()); return; }
         using var mutex = new Mutex(true, "Local\\VoicePoc", out bool owner);
         if (!owner) return;
+        // Task Scheduler starts programs below normal priority; a hotkey poller must not inherit that.
+        try { using var self = Process.GetCurrentProcess(); if (self.PriorityClass is ProcessPriorityClass.BelowNormal or ProcessPriorityClass.Idle) self.PriorityClass = ProcessPriorityClass.Normal; } catch (Exception) { }
         Application.Run(new Dictation(args));
     }
 }
@@ -68,8 +70,12 @@ sealed class Dictation : OrbWindow
         menu.Items.Add("Check connection", null, async (_, _) => { if (!recording && !busy) await CheckConnection(); });
         menu.Items.Add("Test mode", null, (_, _) => { if (recording || busy) return; timer.Stop(); try { using var test = new TestMode(); test.ShowDialog(); } finally { chordState.Update(false, false); timer.Start(); } });
         menu.Items.Add("Last dictation", null, (_, _) => details.Show()); menu.Items.Add("Quit", null, (_, _) => Close()); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => details.Show(); tray.BalloonTipClicked += (_, _) => details.Show();
+        var tickClock = Stopwatch.StartNew();
         timer.Tick += (_, _) =>
         {
+            // A starved UI thread can miss a whole press; make such gaps visible in the log.
+            long gap = tickClock.ElapsedMilliseconds; tickClock.Restart();
+            if (gap > 1000) Log("timer-gap ms=" + gap);
             bool ctrl = Native.GetAsyncKeyState(0x11) < 0;
             bool win = Native.GetAsyncKeyState(0x5B) < 0 || Native.GetAsyncKeyState(0x5C) < 0;
             if (recording || busy) { if (TextInsertion.Capture() != insertionTarget || TextInsertion.OtherInputDown()) insertionCancelled = true; }
