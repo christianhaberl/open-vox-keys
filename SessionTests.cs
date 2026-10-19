@@ -35,6 +35,8 @@ static class SessionTests
     static Task Send(WebSocket ws, object obj) => ws.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(obj))), WebSocketMessageType.Text, true, CancellationToken.None);
     static readonly byte[] Pcm = Enumerable.Range(0, 3200).Select(i => (byte)(i % 251)).ToArray();
     static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
+    // A loopback port that was just released: connecting is refused immediately.
+    static string DeadUrl() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); int port = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return "http://127.0.0.1:" + port; }
     static async Task Case(string mode)
     {
         int requests = 0; bool audioIntact = false;
@@ -60,9 +62,11 @@ static class SessionTests
             if (mode == "error") { await Send(ws, new { type = "error", text = "Incomplete backend" }); return; }
             await Send(ws, new { type = "result", text = mode is "empty" or "both-empty" or "quiet" ? "  " : "Complete primary.", source = "whisper", samples = mode == "wrong-size" ? 1 : Pcm.Length / 2 });
         });
-        var settings = new DictationSettings { GatewayUrl = mode == "direct" ? "" : gateway.Url, FallbackUrl = fallback.Url + "/v1/audio/transcriptions", FinishTimeoutSeconds = 5 };
-        using var session = new LiveSession(settings, _ => { }, _ => { });
-        session.Feed(mode == "silence" ? new byte[Pcm.Length] : mode == "quiet" ? Enumerable.Range(0, Pcm.Length).Select(i => (byte)(i % 2 == 0 ? 4 : 0)).ToArray() : Pcm); if (mode != "direct") await gotStart.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        string dead = DeadUrl();
+        var settings = new DictationSettings { GatewayUrl = mode == "direct" ? "" : mode is "backup" or "no-gateway" ? dead : gateway.Url, BackupGatewayUrl = mode == "backup" ? gateway.Url : mode == "no-gateway" ? DeadUrl() : "", FallbackUrl = fallback.Url + "/v1/audio/transcriptions", FinishTimeoutSeconds = 5 };
+        string lastPreview = "";
+        using var session = new LiveSession(settings, p => lastPreview = p, _ => { });
+        session.Feed(mode == "silence" ? new byte[Pcm.Length] : mode == "quiet" ? Enumerable.Range(0, Pcm.Length).Select(i => (byte)(i % 2 == 0 ? 4 : 0)).ToArray() : Pcm); if (mode is not ("direct" or "no-gateway")) await gotStart.Task.WaitAsync(TimeSpan.FromSeconds(5));
         if (mode == "early") await Task.Delay(200);
         var finish = session.Finish();
         if (mode == "cancel")
@@ -82,6 +86,8 @@ static class SessionTests
         {
             string text = await finish.WaitAsync(TimeSpan.FromSeconds(10));
             if (mode == "valid") { Assert(text == "Complete primary." && requests == 0, "Primary result selection failed"); }
+            else if (mode == "backup") { Assert(text == "Complete primary." && requests == 0 && session.Gateway == "127.0.0.1", "Backup gateway must take over when the primary does not connect"); }
+            else if (mode == "no-gateway") { Assert(text == "Recovered complete." && requests == 1 && audioIntact && lastPreview.StartsWith("Live preview unavailable"), "No reachable gateway must fall back and tell the user"); }
             else { Assert(text == "Recovered complete." && requests == 1 && audioIntact, "Fallback must receive full original audio exactly once: " + mode); }
         }
         session.Dispose(); session.Dispose(); session.Feed(Pcm); // Late audio callback must be harmless.
@@ -89,7 +95,7 @@ static class SessionTests
     internal static void Run()
     {
         var results = new List<object>();
-        foreach (string mode in new[] { "valid", "wrong-size", "early", "disconnect", "error", "cancel", "direct", "empty", "both-empty", "silence", "quiet" })
+        foreach (string mode in new[] { "valid", "wrong-size", "early", "disconnect", "error", "cancel", "direct", "empty", "both-empty", "silence", "quiet", "backup", "no-gateway" })
         {
             try { Case(mode).GetAwaiter().GetResult(); results.Add(new { test = mode, passed = true }); }
             catch (Exception e) { results.Add(new { test = mode, passed = false, error = e.ToString() }); Environment.ExitCode = 1; }

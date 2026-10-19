@@ -9,6 +9,8 @@ sealed class DictationSettings
     public string GatewayUrl { get; set; } = "";
     [PasswordPropertyText(true)]
     public string GatewayApiKey { get; set; } = "";
+    [Description("Optional second streaming gateway, tried when GatewayUrl does not connect. Uses GatewayApiKey.")]
+    public string BackupGatewayUrl { get; set; } = "";
     public string Language { get; set; } = "en";
     [Description("-1 = Windows default microphone; see the tray microphone list for other device numbers.")]
     public int MicrophoneDevice { get; set; } = 0;
@@ -60,7 +62,7 @@ sealed class DictationSettings
     }
     public void Validate()
     {
-        foreach (var u in new[] { GatewayUrl, FallbackUrl }) if (u.Length > 0 && (!Uri.TryCreate(u, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) throw new Exception("Endpoints require http:// or https://.");
+        foreach (var u in new[] { GatewayUrl, BackupGatewayUrl, FallbackUrl }) if (u.Length > 0 && (!Uri.TryCreate(u, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) throw new Exception("Endpoints require http:// or https://.");
         if (PauseSeconds is < .1 or > 3 || DecisionDelaySeconds is < 0 or > 5 || MaximumSectionSeconds is < 3 or > 60 || BatchTimeoutSeconds is < 1 or > 120 || FinishTimeoutSeconds is < 5 or > 180 || FallbackTimeoutSeconds is < 5 or > 300 || SilencePeak is < 0 or > 10000) throw new Exception("A timeout or segmentation value is outside the allowed range.");
     }
     public void Save()
@@ -74,7 +76,7 @@ sealed class DictationSettings
         using var form = new Form { Text = "Open Vox Keys · Settings", Width = 600, Height = 620, StartPosition = FormStartPosition.CenterScreen };
         var clone = JsonSerializer.Deserialize<DictationSettings>(JsonSerializer.Serialize(settings))!;
         var grid = new PropertyGrid { Dock = DockStyle.Fill, SelectedObject = clone, HelpVisible = true };
-        var label = new Label { Dock = DockStyle.Top, Height = 75, Padding = new Padding(8), Text = "GatewayUrl: optional streaming gateway base URL.\nFallbackUrl: full file-transcription URL (local, network or cloud).\nLeave GatewayUrl empty to use file transcription directly. Changes apply to the next dictation." };
+        var label = new Label { Dock = DockStyle.Top, Height = 75, Padding = new Padding(8), Text = "GatewayUrl: optional streaming gateway base URL; BackupGatewayUrl is tried if it does not connect.\nFallbackUrl: full file-transcription URL (local, network or cloud).\nLeave GatewayUrl empty to use file transcription directly. Changes apply to the next dictation." };
         var save = new Button { Text = "Save", Dock = DockStyle.Bottom, Height = 36 };
         save.Click += (_, _) => { try { clone.Save(); form.DialogResult = DialogResult.OK; } catch (Exception e) { MessageBox.Show(form, e.Message); } };
         form.Controls.Add(grid); form.Controls.Add(label); form.Controls.Add(save);

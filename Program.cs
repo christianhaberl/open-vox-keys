@@ -95,7 +95,7 @@ sealed class Dictation : OrbWindow
                     while ((n = reader.Read(bytes, 0, bytes.Length)) > 0) { fixture.Feed(bytes[..n]); sent += n; int delay = (int)(sent / 32.0 - sw.Elapsed.TotalMilliseconds); if (delay > 0) await Task.Delay(delay); }
                     var tail = Stopwatch.StartNew(); string text = await fixture.Finish();
                     var file = Environment.GetEnvironmentVariable("OVK_FIXTURE_RESULT"); if (file != null) File.WriteAllText(file, text);
-                    Log("fixture-ok source=" + fixture.Source + " chars=" + text.Length + " tail_s=" + tail.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
+                    Log("fixture-ok source=" + fixture.Source + (fixture.Gateway.Length > 0 ? " gateway=" + fixture.Gateway : "") + " chars=" + text.Length + " tail_s=" + tail.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
                 }
                 catch (Exception e) { Log("fixture-error " + e.Message); Environment.ExitCode = 1; }
                 busy = false; Close();
@@ -173,6 +173,11 @@ sealed class Dictation : OrbWindow
             input?.StopRecording(); if (done != null) await done.Task.WaitAsync(TimeSpan.FromSeconds(3));
             input?.Dispose(); if (job == generation) microphone = null;
             Log("capture " + active!.AudioSummary + " device=" + settings.MicrophoneDevice + " first_audio_ms=" + audioStart());
+            if (active.SampleCount == 0)
+            {
+                // Not silence: the device delivered no buffers at all (stalled Windows audio input or unplugged device).
+                active.Cancel(); status.Text = "Microphone delivered no audio (device " + settings.MicrophoneDevice + "). Check the device; restarting Windows Audio usually helps."; Log("mic-no-audio device=" + settings.MicrophoneDevice); Notice(); return;
+            }
             if (settings.SilencePeak > 0 && active.Peak < settings.SilencePeak)
             {
                 // Nothing audible was captured: do not occupy the ASR path, report at once.
@@ -180,7 +185,7 @@ sealed class Dictation : OrbWindow
             }
             string text = await active.Finish(); if (!Current()) return;
             output.Text = text; status.Text = text.Length == 0 ? "No speech detected." : $"Done · {watch.Elapsed.TotalSeconds:F1} s · {active.Source}";
-            Log("result source=" + active.Source + " release_s=" + watch.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + " chars=" + text.Length);
+            Log("result source=" + active.Source + (active.Gateway.Length > 0 ? " gateway=" + active.Gateway : "") + " release_s=" + watch.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + " chars=" + text.Length);
             if (text.Length > 0)
             {
                 for (int n = 0; n < 50 && TextInsertion.ModifiersDown() && Current() && !insertionCancelled; n++) await Task.Delay(20);
@@ -189,7 +194,13 @@ sealed class Dictation : OrbWindow
                 {
                     status.Text = $"Inserted · {watch.Elapsed.TotalSeconds:F1} s · {active.Source}"; Log("unicode-input-submitted chars=" + text.Length); Hide();
                 }
-                else if (Current()) { status.Text = "Text ready — focus or input changed. Use Copy to insert it."; Log("insertion-skipped"); Notice(); }
+                else if (Current())
+                {
+                    // Never lose the text silently: put it on the clipboard so Ctrl+V works right away.
+                    bool copied = false; try { Clipboard.SetText(text); copied = true; } catch (Exception) { }
+                    status.Text = copied ? "Focus or input changed — text copied to the clipboard. Paste with Ctrl+V." : "Text ready — focus or input changed. Use Copy to insert it.";
+                    Log("insertion-skipped clipboard=" + (copied ? 1 : 0)); Notice();
+                }
             }
         }
         catch (Exception e) { if (Current()) { status.Text = "Error — " + e.Message; try { string saved = active?.SaveRecovery() ?? ""; if (saved.Length > 0) status.Text += " · Recording saved in OpenVoxKeys/Recovery."; } catch (Exception) { status.Text += " · Could not save the recording."; } Log("error " + e.Message); Notice(); details.Show(); } }

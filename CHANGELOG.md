@@ -7,6 +7,10 @@ Versions follow Semantic Versioning. Prereleases may change configuration and AP
 - Never ignore the hotkey: a press while a result is pending supersedes that dictation (recording saved to Recovery) and starts a new one.
 - Start the microphone before drawing the overlay; log `mic_ms` and `first_audio_ms` per dictation.
 - Skip ASR for recordings below `SilencePeak` (default 300) and report it immediately instead of blocking on an empty result.
+- `BackupGatewayUrl`: a second streaming gateway, tried when `GatewayUrl` does not connect within 2 s, so the live preview survives one gateway outage.
+- When no gateway is reachable, the overlay says so ("Live preview unavailable") instead of staying empty; the file fallback still runs.
+- A recording with zero samples is reported as a microphone failure, not as silence.
+- If insertion is blocked (focus or input changed), the transcript is copied to the clipboard so it can be pasted with Ctrl+V.
 
 ## 0.3.0-beta.3 — 2026-09-23
 

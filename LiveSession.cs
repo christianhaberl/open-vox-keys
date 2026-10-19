@@ -14,7 +14,8 @@ sealed class LiveSession : IDisposable
     readonly Channel<byte[]> frames = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(500) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
     readonly MemoryStream audio = new();
     readonly object audioLock = new();
-    readonly ClientWebSocket socket = new();
+    // Replaced when the primary gateway does not connect and the backup gateway is tried.
+    volatile ClientWebSocket socket = new();
     readonly Task<string> remote;
     string liveText = "";
     int sectionCount;
@@ -23,6 +24,8 @@ sealed class LiveSession : IDisposable
     double squareSum;
     public string AudioSummary { get { lock (audioLock) return $"samples={sampleCount} peak={samplePeak} rms={Math.Sqrt(squareSum / Math.Max(1, sampleCount)):F2}"; } }
     public int Peak { get { lock (audioLock) return samplePeak; } }
+    public long SampleCount { get { lock (audioLock) return sampleCount; } }
+    public string Gateway { get; private set; } = "";
     bool stopped;
     bool disposed;
     public string Source { get; private set; } = "";
@@ -44,10 +47,25 @@ sealed class LiveSession : IDisposable
     async Task<string> Remote()
     {
         if (string.IsNullOrWhiteSpace(settings.GatewayUrl)) throw new Exception("No streaming gateway configured.");
-        using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel.Token); connect.CancelAfter(TimeSpan.FromSeconds(3));
-        var uri = new UriBuilder(settings.GatewayUrl.TrimEnd('/') + "/ws"); uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
-        if (settings.GatewayApiKey.Length > 0) socket.Options.SetRequestHeader("Authorization", "Bearer " + settings.GatewayApiKey);
-        await socket.ConnectAsync(uri.Uri, connect.Token);
+        var gateways = new[] { settings.GatewayUrl, settings.BackupGatewayUrl }.Where(u => !string.IsNullOrWhiteSpace(u)).ToArray();
+        Exception? failure = null;
+        for (int i = 0; i < gateways.Length; i++)
+        {
+            // A ClientWebSocket cannot be reused after a failed connect.
+            if (i > 0) { var previous = socket; socket = new ClientWebSocket(); previous.Dispose(); }
+            using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancel.Token); connect.CancelAfter(TimeSpan.FromSeconds(2));
+            var uri = new UriBuilder(gateways[i].TrimEnd('/') + "/ws"); uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
+            if (settings.GatewayApiKey.Length > 0) socket.Options.SetRequestHeader("Authorization", "Bearer " + settings.GatewayApiKey);
+            try { await socket.ConnectAsync(uri.Uri, connect.Token); Gateway = uri.Host; failure = null; break; }
+            catch (Exception e) when (!cancel.IsCancellationRequested) { failure = e; }
+        }
+        if (failure != null)
+        {
+            // Tell the user why the bubble stays empty; the file fallback still runs after release.
+            preview("Live preview unavailable: no gateway reachable. Text follows after release.");
+            frames.Writer.TryComplete();
+            throw new IOException("No streaming gateway reachable.", failure);
+        }
         var start = new { type = "start", language = settings.Language, segmentation = new { pause = settings.PauseSeconds, wait = settings.DecisionDelaySeconds, maximum = settings.MaximumSectionSeconds, signals = new[] { "vad", "punct", "length" }, combine = "and" }, batch_timeout_s = settings.BatchTimeoutSeconds, finish_timeout_s = settings.FinishTimeoutSeconds, stream_fallback = settings.StreamFallback };
         await socket.SendAsync(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(start)), WebSocketMessageType.Text, true, cancel.Token);
         var sender = SendFrames();
