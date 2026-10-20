@@ -9,6 +9,7 @@ sealed class Capture : IDisposable
     public event Action<byte[]>? Data;
     public event Action<Exception?>? Stopped;
     public string Api { get; private set; } = "";
+    public string FallbackReason { get; private set; } = "";
     static readonly Guid IeeeFloatSubtype = new("00000003-0000-0010-8000-00aa00389b71");
     IWaveIn? input;
     WdlResampler? resampler;
@@ -20,7 +21,7 @@ sealed class Capture : IDisposable
         if (preferWasapi)
         {
             try { StartWasapi(waveInDevice); return; }
-            catch (Exception) { input?.Dispose(); input = null; }
+            catch (Exception e) { input?.Dispose(); input = null; FallbackReason = e.GetType().Name + ": " + e.Message; lock (deviceLock) cached = null; }
         }
         StartWaveIn(waveInDevice);
     }
@@ -29,7 +30,7 @@ sealed class Capture : IDisposable
     // First WASAPI use in a process costs ~350 ms (COM enumerator, audio client, JIT). Pay it at app start without opening the microphone.
     internal static void Warm(int device)
     {
-        try { using var endpoint = FindDevice(device); if (endpoint == null) return; using var client = endpoint.AudioClient; _ = client.MixFormat; var r = new WdlResampler(); r.SetMode(true, 2, false); r.SetFilterParms(); r.SetFeedMode(true); r.SetRates(48000, 16000); }
+        try { var endpoint = CachedDevice(device); if (endpoint == null) return; using var client = endpoint.AudioClient; _ = client.MixFormat; var r = new WdlResampler(); r.SetMode(true, 2, false); r.SetFilterParms(); r.SetFeedMode(true); r.SetRates(48000, 16000); }
         catch (Exception) { }
     }
 
@@ -52,9 +53,22 @@ sealed class Capture : IDisposable
     public void Dispose() { input?.Dispose(); input = null; }
 
     // WaveIn numbers devices and truncates names to 31 characters; match the WASAPI endpoint by that prefix.
+    // Enumerator and endpoint are kept between dictations; re-creating them costs ~200 ms after a long idle.
+    // They are COM objects bound to the creating apartment: create and use them on the UI thread only.
+    static readonly object deviceLock = new();
+    static MMDeviceEnumerator? sharedEnumerator;
+    static (int index, MMDevice device)? cached;
+    static MMDevice? CachedDevice(int waveInDevice)
+    {
+        lock (deviceLock)
+        {
+            if (cached is { } c && c.index == waveInDevice && c.device.State == DeviceState.Active) return c.device;
+            var device = FindDevice(waveInDevice); cached = device == null ? null : (waveInDevice, device); return device;
+        }
+    }
     internal static MMDevice? FindDevice(int waveInDevice)
     {
-        using var enumerator = new MMDeviceEnumerator();
+        var enumerator = sharedEnumerator ??= new MMDeviceEnumerator();
         if (waveInDevice < 0) return enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
         if (waveInDevice >= WaveIn.DeviceCount) return null;
         string name = WaveIn.GetCapabilities(waveInDevice).ProductName.Trim();
@@ -63,7 +77,7 @@ sealed class Capture : IDisposable
 
     void StartWasapi(int waveInDevice)
     {
-        var device = FindDevice(waveInDevice) ?? throw new InvalidOperationException("No matching WASAPI capture device.");
+        var device = CachedDevice(waveInDevice) ?? throw new InvalidOperationException("No matching WASAPI capture device.");
         var capture = new WasapiCapture(device, true, 20);
         var format = capture.WaveFormat;
         isFloat = format.Encoding == WaveFormatEncoding.IeeeFloat || (format is WaveFormatExtensible extensible && extensible.SubFormat == IeeeFloatSubtype);

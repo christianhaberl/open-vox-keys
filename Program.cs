@@ -38,7 +38,7 @@ sealed class Dictation : OrbWindow
     Func<long> firstAudioMs = () => -1;
     DictationSettings settings = new(); LiveSession? session; Capture? microphone;
     DateTime busySince;
-    nint elevatedNoticeWindow; int elevationCheck;
+    nint elevatedNoticeWindow; int elevationCheck; DateTime lastWarm = DateTime.UtcNow;
     // Windows hides key state from a non-elevated app while an elevated window has focus; say so once per window.
     void CheckElevatedForeground()
     {
@@ -100,6 +100,8 @@ sealed class Dictation : OrbWindow
             // Built-in job watchdog: no single dictation may hold the app longer than every timeout together.
             if (busy && !recording && DateTime.UtcNow - busySince > TimeSpan.FromSeconds(settings.FinishTimeoutSeconds + settings.FallbackTimeoutSeconds + 15)) { Log("job-watchdog cancelled after " + (int)(DateTime.UtcNow - busySince).TotalSeconds + "s"); generation++; Supersede(); status.Text = "The last dictation took too long and was cancelled. Recording saved in OpenVoxKeys/Recovery."; Notice(); }
             if (!selfElevated && (++elevationCheck % 40) == 0) CheckElevatedForeground();
+            // Keep the capture path paged in: after hours idle the first buffer otherwise arrives ~250 ms late.
+            if (!recording && !busy && DateTime.UtcNow - lastWarm > TimeSpan.FromMinutes(5)) { lastWarm = DateTime.UtcNow; global::Capture.Warm(settings.MicrophoneDevice); }
         }; timer.Start();
         Shown += async (_, _) =>
         {
@@ -121,7 +123,7 @@ sealed class Dictation : OrbWindow
                 catch (Exception e) { Log("fixture-error " + e.Message); Environment.ExitCode = 1; }
                 busy = false; Close();
             }
-            else { _ = Task.Run(() => global::Capture.Warm(settings.MicrophoneDevice)); await WarmFallback(); if (settings.GatewayUrl.Length == 0 && settings.FallbackUrl.Length == 0) { timer.Stop(); try { if (DictationSettings.Edit(details, settings)) settings = DictationSettings.Load(); } finally { timer.Start(); } } }
+            else { global::Capture.Warm(settings.MicrophoneDevice); await WarmFallback(); if (settings.GatewayUrl.Length == 0 && settings.FallbackUrl.Length == 0) { timer.Stop(); try { if (DictationSettings.Edit(details, settings)) settings = DictationSettings.Load(); } finally { timer.Start(); } } }
         };
     }
     void Ui(Action f) { if (!IsDisposed && IsHandleCreated) try { BeginInvoke(f); } catch (InvalidOperationException) { } }
@@ -179,6 +181,7 @@ sealed class Dictation : OrbWindow
             // Microphone first, overlay second: drawing the orb must not delay capture of the first syllable.
             recording = true; started = DateTime.UtcNow; input.Start(settings.MicrophoneDevice, settings.PreferWasapi); long micMs = press.ElapsedMilliseconds;
             PlaceOrb(insertionTarget.Window); Show(); status.Text = "● Recording — release Ctrl+Win";
+            if (input.FallbackReason.Length > 0) Log("wasapi-fallback " + input.FallbackReason);
             Log("recording-start streaming=true api=" + input.Api + " mic_ms=" + micMs + " orb_ms=" + press.ElapsedMilliseconds);
         }
         catch (Exception e) { recording = false; microphone?.Dispose(); microphone = null; session?.Dispose(); session = null; status.Text = "Microphone error: " + e.Message; Log("recording-error " + e.Message); Hide(); Notice(); }
